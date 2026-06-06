@@ -38,6 +38,12 @@ async def my_review_queue(
     if user.role not in (UserRole.EXPERT, UserRole.ADMIN, UserRole.MODERATOR):
         raise HTTPException(status_code=403, detail="Experts only")
 
+    # UUID-based experts (profiles table) have no integer FK in reviews yet — return empty
+    try:
+        int(str(user.id))
+    except (ValueError, TypeError):
+        return []
+
     result = await db.execute(
         select(Review).where(
             and_(Review.expert_id == user.id, Review.completed_at == None)
