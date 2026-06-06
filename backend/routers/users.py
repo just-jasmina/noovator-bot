@@ -1,79 +1,107 @@
-import aiofiles
-import os
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+"""Supabase-native user/profile endpoints."""
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from pydantic import BaseModel
+from typing import Optional
+
 from ..database import get_db
 from ..middleware.auth import get_current_user, get_active_user
-from ..models.user import User, UserStatus
-from ..models.xp import XPRule
-from ..schemas.user import UserFullProfile, UserPublicProfile, UserRegistrationStep1, UserProfileUpdate
-from ..services.xp_engine import award_xp
-from ..services.notifications import notify_user
-from ..models.notification import NotificationType
+from ..models.user import User
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.get("/me", response_model=UserFullProfile)
-async def get_me(user: User = Depends(get_current_user)):
-    return user
+def _profile_dict(r: dict) -> dict:
+    return {
+        "id": str(r["id"]),
+        "telegram_id": r.get("telegram_id"),
+        "first_name": (r.get("full_name") or "").split(" ")[0] if r.get("full_name") else None,
+        "last_name": " ".join((r.get("full_name") or "").split(" ")[1:]) or None,
+        "full_name": r.get("full_name"),
+        "role": r.get("role") or "user",
+        "status": r.get("status") or "active",
+        "league": r.get("league") or "novice",
+        "season_xp": r.get("season_xp") or 0,
+        "global_xp": r.get("global_xp") or 0,
+        "streak_days": r.get("streak_days") or 0,
+        "pnfl": r.get("pnfl"),
+        "phone": r.get("phone"),
+        "workplace": r.get("workplace"),
+        "expert_tags": ", ".join(r.get("expert_tags") or []) if r.get("expert_tags") else None,
+        "language": "uz",
+        "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
+    }
 
 
-@router.put("/me", response_model=UserFullProfile)
+async def _load_profile(db: AsyncSession, user_id) -> dict | None:
+    row = await db.execute(
+        text("""SELECT id, telegram_id, full_name, role, status, league,
+                       season_xp, global_xp, streak_days, pnfl, phone, workplace,
+                       expert_tags, created_at
+                FROM profiles WHERE id = :uid LIMIT 1"""),
+        {"uid": str(user_id)},
+    )
+    r = row.mappings().first()
+    return _profile_dict(dict(r)) if r else None
+
+
+@router.get("/me", response_model=dict)
+async def get_me(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    profile = await _load_profile(db, user.id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return profile
+
+
+class ProfileUpdate(BaseModel):
+    workplace: Optional[str] = None
+    phone: Optional[str] = None
+
+
+@router.put("/me", response_model=dict)
 async def update_profile(
-    data: UserProfileUpdate,
+    data: ProfileUpdate,
     user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(user, field, value)
-    await db.flush()
-    return user
+    fields = data.model_dump(exclude_unset=True)
+    if fields:
+        sets = ", ".join(f"{k} = :{k}" for k in fields)
+        fields["uid"] = str(user.id)
+        await db.execute(text(f"UPDATE profiles SET {sets} WHERE id = :uid"), fields)
+    return await _load_profile(db, user.id)
 
 
-@router.post("/register", response_model=UserFullProfile)
+class RegistrationData(BaseModel):
+    pnfl: str
+    first_name: str
+    last_name: str
+    phone: Optional[str] = None
+    workplace: Optional[str] = None
+
+
+@router.post("/register", response_model=dict)
 async def register_user(
-    data: UserRegistrationStep1,
+    data: RegistrationData,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if user.pnfl:
-        raise HTTPException(status_code=400, detail="Already registered")
-
-    # Check PNFL uniqueness
-    existing = await db.execute(
-        select(User).where(User.pnfl == data.pnfl, User.id != user.id)
+    full_name = f"{data.first_name} {data.last_name}".strip()
+    await db.execute(
+        text("""UPDATE profiles
+                SET pnfl = :pnfl, full_name = :fn, phone = :phone,
+                    workplace = :wp, status = 'active'
+                WHERE id = :uid"""),
+        {"pnfl": data.pnfl, "fn": full_name, "phone": data.phone,
+         "wp": data.workplace, "uid": str(user.id)},
     )
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="PNFL already registered")
-
-    for field, value in data.model_dump().items():
-        setattr(user, field, value)
-    user.status = UserStatus.PENDING
-    await db.flush()
-    return user
+    return await _load_profile(db, user.id)
 
 
-@router.post("/me/avatar")
-async def upload_avatar(
-    file: UploadFile = File(...),
-    user: User = Depends(get_active_user),
-    db: AsyncSession = Depends(get_db),
-):
-    if file.size and file.size > 5 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File too large (max 5 MB)")
-    # In production: upload to S3 and return URL
-    filename = f"avatars/{user.id}_{file.filename}"
-    user.avatar_url = f"/media/{filename}"
-    await db.flush()
-    return {"avatar_url": user.avatar_url}
-
-
-@router.get("/{user_id}", response_model=UserPublicProfile)
-async def get_user_profile(user_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
+@router.get("/{user_id}", response_model=dict)
+async def get_user_profile(user_id: str, db: AsyncSession = Depends(get_db)):
+    profile = await _load_profile(db, user_id)
+    if not profile:
         raise HTTPException(status_code=404, detail="User not found")
-    return user
+    return profile

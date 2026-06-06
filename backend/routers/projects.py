@@ -1,45 +1,67 @@
-import json
-from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+"""Supabase-native project endpoints (UUID schema, raw SQL)."""
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, desc, func
 from typing import List, Optional
+from pydantic import BaseModel
+
 from ..database import get_db
 from ..middleware.auth import get_active_user
-from ..models.user import User, UserLeague
-from ..models.project import Project, ProjectStatus, ProjectTag
-from ..schemas.project import ProjectCreate, ProjectUpdate, ProjectCard, ProjectDetail
-from ..services.xp_engine import award_xp
-from ..services.smart_router import assign_experts
-from ..services.notifications import notify_user
-from ..models.notification import NotificationType
+from ..models.user import User
+from ..services.tag_routing import normalize_tags, tag_label, assign_experts_supabase
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
-LEAGUE_MAX_PROJECTS = {
-    UserLeague.NOVICE: 1,
-    UserLeague.AMATEUR: 3,
-    UserLeague.PROFESSIONAL: 9999,
-    UserLeague.INNOVATOR: 9999,
-}
+# Statuses visible in the public feed
+PUBLIC_STATUSES = ("crowdsource", "approved", "pilot", "scaled", "ministry", "incubation")
 
 
-def _serialize_project(p: Project, user: User | None = None) -> dict:
-    tags = [t.tag for t in p.tags]
-    author = p.author
+class ProjectCreateReq(BaseModel):
+    title: str
+    elevator_pitch: Optional[str] = ""
+    tags: List[str] = []
+    problem: Optional[str] = ""
+    solution: Optional[str] = ""
+    audience: Optional[List[str]] = []
+    kpi: Optional[list] = []
+    social_economic_effect: Optional[str] = ""
+    budget_min: Optional[int] = None
+    budget_max: Optional[int] = None
+    budget_purpose: Optional[str] = ""
+    timeline: Optional[str] = ""
+
+
+def _kpis_to_text(kpi) -> list[str]:
+    """Frontend sends [{label,value}]; store as 'label: value' strings."""
+    out = []
+    for k in kpi or []:
+        if isinstance(k, dict):
+            label = (k.get("label") or "").strip()
+            value = (k.get("value") or "").strip()
+            if label:
+                out.append(f"{label}: {value}" if value else label)
+        elif isinstance(k, str) and k.strip():
+            out.append(k.strip())
+    return out
+
+
+def _serialize(r: dict) -> dict:
+    tags = list(r.get("tags") or [])
     return {
-        "id": p.id,
-        "title": p.title,
-        "elevator_pitch": p.elevator_pitch,
+        "id": str(r["id"]),
+        "title": r["title"],
+        "elevator_pitch": r.get("pitch"),
+        "pitch": r.get("pitch"),
         "tags": tags,
-        "status": p.status,
-        "author_id": p.author_id,
-        "author_name": f"{author.first_name or ''} {author.last_name or ''}".strip() if author else None,
-        "author_league": author.league if author else None,
-        "comment_count": p.comment_count,
-        "view_count": p.view_count,
-        "has_mentor": p.mentorship is not None and p.mentorship.status == "active",
-        "created_at": p.created_at,
+        "tag_labels": [tag_label(t) for t in tags],
+        "status": r.get("status"),
+        "author_id": str(r["user_id"]) if r.get("user_id") else None,
+        "author_name": r.get("author_name"),
+        "comment_count": r.get("comments_count") or 0,
+        "view_count": r.get("likes_count") or 0,
+        "likes_count": r.get("likes_count") or 0,
+        "has_mentor": False,
+        "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
     }
 
 
@@ -51,79 +73,96 @@ async def list_projects(
     size: int = Query(20, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
 ):
-    """Public project feed — only CROWDSOURCE and above statuses."""
-    query = select(Project).where(
-        Project.status.in_([
-            ProjectStatus.CROWDSOURCE, ProjectStatus.INCUBATION,
-            ProjectStatus.MINISTRY, ProjectStatus.PILOT, ProjectStatus.SCALED,
-        ])
-    )
+    order = {
+        "popular": "pr.likes_count DESC",
+        "discussed": "pr.comments_count DESC",
+    }.get(sort, "pr.created_at DESC")
+
+    params = {"statuses": list(PUBLIC_STATUSES), "lim": size, "off": (page - 1) * size}
+    tag_filter = ""
     if tag:
-        query = query.join(ProjectTag).where(ProjectTag.tag == tag)
+        params["tag"] = normalize_tags([tag])
+        tag_filter = "AND pr.tags && CAST(:tag AS text[])"
 
-    if sort == "popular":
-        query = query.order_by(desc(Project.view_count))
-    elif sort == "discussed":
-        query = query.order_by(desc(Project.comment_count))
-    else:
-        query = query.order_by(desc(Project.created_at))
-
-    offset = (page - 1) * size
-    query = query.offset(offset).limit(size)
-
-    result = await db.execute(query)
-    projects = result.scalars().all()
-    return [_serialize_project(p) for p in projects]
+    rows = await db.execute(
+        text(f"""
+            SELECT pr.*,
+                   (SELECT full_name FROM profiles a WHERE a.id = pr.user_id) AS author_name
+            FROM projects pr
+            WHERE pr.status = ANY(:statuses) {tag_filter}
+            ORDER BY {order}
+            LIMIT :lim OFFSET :off
+        """),
+        params,
+    )
+    return [_serialize(dict(r)) for r in rows.mappings().all()]
 
 
 @router.post("", response_model=dict, status_code=201)
 async def create_project(
-    data: ProjectCreate,
+    data: ProjectCreateReq,
     user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Check active projects limit per league
-    max_active = LEAGUE_MAX_PROJECTS[user.league]
-    active_count_result = await db.execute(
-        select(func.count(Project.id)).where(
-            and_(
-                Project.author_id == user.id,
-                Project.status.in_([ProjectStatus.REVIEW, ProjectStatus.REVISION]),
-            )
-        )
+    tags = normalize_tags(data.tags)
+    if not tags:
+        raise HTTPException(status_code=400, detail="Kamida 1 ta teg tanlang")
+
+    budget_parts = []
+    if data.budget_min is not None:
+        budget_parts.append(str(data.budget_min))
+    if data.budget_max is not None:
+        budget_parts.append(str(data.budget_max))
+    cost_range = " - ".join(budget_parts)
+
+    row = await db.execute(
+        text("""
+            INSERT INTO projects
+                (user_id, title, pitch, tags, problem, solution, audience, kpis,
+                 effect, cost_range, budget_use, timeline, status)
+            VALUES
+                (:uid, :title, :pitch, CAST(:tags AS text[]), :problem, :solution,
+                 CAST(:audience AS text[]), CAST(:kpis AS text[]),
+                 :effect, :cost_range, :budget_use, :timeline, 'under_review')
+            RETURNING *
+        """),
+        {
+            "uid": str(user.id),
+            "title": data.title,
+            "pitch": data.elevator_pitch or "",
+            "tags": tags,
+            "problem": data.problem or "",
+            "solution": data.solution or "",
+            "audience": list(data.audience or []),
+            "kpis": _kpis_to_text(data.kpi),
+            "effect": data.social_economic_effect or "",
+            "cost_range": cost_range,
+            "budget_use": data.budget_purpose or "",
+            "timeline": data.timeline or "",
+        },
     )
-    if active_count_result.scalar() >= max_active:
-        raise HTTPException(
-            status_code=400,
-            detail=f"League limit reached: max {max_active} active project(s) in review"
+    project = dict(row.mappings().first())
+    project_id = str(project["id"])
+
+    # Route to experts by tag
+    assigned = await assign_experts_supabase(db, project_id, tags)
+
+    # Award XP to the author
+    try:
+        await db.execute(
+            text("INSERT INTO xp_transactions (user_id, amount, reason, icon) VALUES (:uid, 50, 'Loyiha yuborildi', '🚀')"),
+            {"uid": str(user.id)},
         )
+        await db.execute(
+            text("UPDATE profiles SET season_xp = COALESCE(season_xp,0)+50, global_xp = COALESCE(global_xp,0)+50 WHERE id = :uid"),
+            {"uid": str(user.id)},
+        )
+    except Exception:
+        pass
 
-    project = Project(
-        author_id=user.id,
-        title=data.title,
-        elevator_pitch=data.elevator_pitch,
-        problem=data.problem,
-        solution=data.solution,
-        audience=json.dumps(data.audience or []),
-        kpi=json.dumps(data.kpi or []),
-        social_economic_effect=data.social_economic_effect,
-        budget_min=data.budget_min,
-        budget_max=data.budget_max,
-        budget_purpose=data.budget_purpose,
-        timeline=data.timeline,
-        status=ProjectStatus.REVIEW,
-        submitted_at=datetime.now(timezone.utc),
-    )
-    db.add(project)
-    await db.flush()
-
-    for tag_name in data.tags:
-        db.add(ProjectTag(project_id=project.id, tag=tag_name))
-
-    await assign_experts(db, project)
-    await award_xp(db, user, "project_submitted", f"Submitted project #{project.id}", project.id)
-    await db.flush()
-    return _serialize_project(project)
+    result = _serialize(project)
+    result["assigned_experts"] = len(assigned)
+    return result
 
 
 @router.get("/my", response_model=List[dict])
@@ -131,91 +170,36 @@ async def my_projects(
     user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Project).where(Project.author_id == user.id).order_by(desc(Project.created_at))
+    rows = await db.execute(
+        text("SELECT * FROM projects WHERE user_id = :uid ORDER BY created_at DESC"),
+        {"uid": str(user.id)},
     )
-    return [_serialize_project(p, user) for p in result.scalars().all()]
+    return [_serialize(dict(r)) for r in rows.mappings().all()]
 
 
 @router.get("/{project_id}", response_model=dict)
-async def get_project(project_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if not project:
+async def get_project(project_id: str, db: AsyncSession = Depends(get_db)):
+    row = await db.execute(
+        text("""
+            SELECT pr.*,
+                   (SELECT full_name FROM profiles a WHERE a.id = pr.user_id) AS author_name
+            FROM projects pr WHERE pr.id = :pid LIMIT 1
+        """),
+        {"pid": project_id},
+    )
+    r = row.mappings().first()
+    if not r:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Increment view count
-    project.view_count += 1
-    await db.flush()
-
-    detail = _serialize_project(project)
+    detail = _serialize(dict(r))
     detail.update({
-        "problem": project.problem,
-        "solution": project.solution,
-        "audience": json.loads(project.audience or "[]"),
-        "kpi": json.loads(project.kpi or "[]"),
-        "social_economic_effect": project.social_economic_effect,
-        "budget_min": project.budget_min,
-        "budget_max": project.budget_max,
-        "budget_purpose": project.budget_purpose,
-        "timeline": project.timeline,
-        "documents": json.loads(project.documents or "[]"),
-        "updated_at": project.updated_at,
-        "submitted_at": project.submitted_at,
+        "problem": r["problem"],
+        "solution": r["solution"],
+        "audience": list(r["audience"] or []),
+        "kpi": list(r["kpis"] or []),
+        "social_economic_effect": r["effect"],
+        "budget_purpose": r["budget_use"],
+        "cost_range": r["cost_range"],
+        "timeline": r["timeline"],
     })
     return detail
-
-
-@router.put("/{project_id}", response_model=dict)
-async def update_project(
-    project_id: int,
-    data: ProjectUpdate,
-    user: User = Depends(get_active_user),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if not project or project.author_id != user.id:
-        raise HTTPException(status_code=404, detail="Project not found")
-    if project.status not in (ProjectStatus.DRAFT, ProjectStatus.REVISION):
-        raise HTTPException(status_code=400, detail="Cannot edit project in this status")
-
-    for field, value in data.model_dump(exclude_unset=True).items():
-        if field == "tags":
-            # Replace tags
-            for old_tag in project.tags:
-                await db.delete(old_tag)
-            for tag_name in value:
-                db.add(ProjectTag(project_id=project.id, tag=tag_name))
-        elif field in ("audience", "kpi"):
-            setattr(project, field, json.dumps(value))
-        else:
-            setattr(project, field, value)
-
-    await db.flush()
-    return _serialize_project(project)
-
-
-@router.post("/{project_id}/documents")
-async def upload_document(
-    project_id: int,
-    file: UploadFile = File(...),
-    user: User = Depends(get_active_user),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if not project or project.author_id != user.id:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    max_size = 10 * 1024 * 1024
-    if file.size and file.size > max_size:
-        raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
-
-    # In production: upload to S3
-    file_url = f"/media/projects/{project_id}/{file.filename}"
-    docs = json.loads(project.documents or "[]")
-    docs.append({"name": file.filename, "url": file_url})
-    project.documents = json.dumps(docs)
-    await db.flush()
-    return {"url": file_url}

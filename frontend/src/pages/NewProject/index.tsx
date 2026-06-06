@@ -16,11 +16,12 @@ const STEPS = [
   { id: 5, icon: '📎', title: 'Hujjatlar' },
 ]
 
+// Canonical tags — MUST match profiles.expert_tags so routing works
 const AVAILABLE_TAGS = [
-  'Organizatsiya_sog\'liqni_saqlash', 'IT_va_Raqamlashtirish',
+  'Organizatsiya_sogliqni_saqlash', 'IT_va_Raqamlashtirish',
   'Moliya_va_Iqtisodiyot', 'Jarrohlik_amaliyoti', 'Med_huquq',
-  'Farmakologiya', 'Pediatriya', 'Medtexnika', 'Sun\'iy_intellekt',
-  'Sanitariya_Epidemiologiya', 'Tibbiyot_ta\'limi', 'Laborator_diagnostika',
+  'Farmakologiya', 'Pediatriya', 'Medtexnika', 'Suniy_intellekt',
+  'Sanitariya_Epidemiologiya', 'Tibbiyot_talimi', 'Laborator_diagnostika',
 ]
 
 const AUDIENCE_OPTIONS = [

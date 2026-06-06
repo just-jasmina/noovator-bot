@@ -20,7 +20,9 @@ apiClient.interceptors.response.use(
   (err) => {
     if (err.response?.status === 401) {
       localStorage.removeItem('access_token')
-      window.location.href = '/'
+      localStorage.removeItem('auth_user')
+      const isExpert = window.location.pathname.startsWith('/expert')
+      window.location.href = isExpert ? '/expert/login' : '/'
     }
     return Promise.reject(err)
   }

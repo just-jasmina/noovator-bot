@@ -31,7 +31,7 @@ export default function App() {
 
   useEffect(() => {
     // Expert login page handles its own auth — skip Telegram init
-    if (isExpertRoute() && !token) return
+    if (isExpertRoute()) return
 
     const init = async () => {
       try {
@@ -61,7 +61,7 @@ export default function App() {
     document.documentElement.classList.toggle('dark', isDark)
   }, [isDark])
 
-  if (isLoading && !isExpertRoute()) return <PageLoader />
+  if (isLoading && !isExpertRoute() && !user) return <PageLoader />
 
   const isRegistered = user && user.pnfl
   const isActive = user && user.status === 'active'

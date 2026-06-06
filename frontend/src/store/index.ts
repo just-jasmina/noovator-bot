@@ -10,17 +10,30 @@ interface AuthStore {
   logout: () => void
 }
 
+function loadInitialUser() {
+  try {
+    const raw = localStorage.getItem('auth_user')
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
 export const useAuthStore = create<AuthStore>((set) => ({
-  user: null,
+  user: loadInitialUser(),
   token: localStorage.getItem('access_token'),
   isLoading: true,
-  setUser: (user) => set({ user, isLoading: false }),
+  setUser: (user) => {
+    localStorage.setItem('auth_user', JSON.stringify(user))
+    set({ user, isLoading: false })
+  },
   setToken: (token) => {
     localStorage.setItem('access_token', token)
     set({ token })
   },
   logout: () => {
     localStorage.removeItem('access_token')
+    localStorage.removeItem('auth_user')
     set({ user: null, token: null })
   },
 }))

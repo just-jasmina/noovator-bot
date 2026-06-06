@@ -2,9 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..services.auth import verify_telegram_init_data, get_or_create_user, create_access_token, authenticate_expert
-from ..services.xp_engine import process_daily_login
 from ..schemas.user import TelegramInitData, TokenResponse, ExpertLoginRequest
-from ..models.user import UserRole
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -21,13 +19,10 @@ async def auth_telegram(payload: TelegramInitData, db: AsyncSession = Depends(ge
 
     user, is_new = await get_or_create_user(db, tg_user)
 
-    if not is_new and user.status == "active":
-        await process_daily_login(db, user)
-
     token = create_access_token(user.id)
     return TokenResponse(
         access_token=token,
-        user_id=user.id,
+        user_id=str(user.id),
         is_registered=bool(user.pnfl),
     )
 

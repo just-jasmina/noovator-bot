@@ -106,18 +106,35 @@ async def authenticate_expert(db: AsyncSession, username: str, password: str) ->
 
 
 async def get_or_create_user(db: AsyncSession, tg_user: dict) -> tuple[User, bool]:
-    """Returns (user, is_new)."""
+    """Supabase-native: find or create a profile row by telegram_id. Returns (user, is_new)."""
+    from sqlalchemy import text as sa_text
     telegram_id = tg_user["id"]
-    result = await db.execute(select(User).where(User.telegram_id == telegram_id))
-    user = result.scalar_one_or_none()
-    is_new = user is None
+
+    row = await db.execute(
+        sa_text("SELECT id, role, status, pnfl, full_name FROM profiles WHERE telegram_id = :tid LIMIT 1"),
+        {"tid": telegram_id},
+    )
+    profile = row.mappings().first()
+    is_new = profile is None
+
     if is_new:
-        user = User(
-            telegram_id=telegram_id,
-            telegram_username=tg_user.get("username"),
-            telegram_first_name=tg_user.get("first_name"),
-            telegram_last_name=tg_user.get("last_name"),
+        full_name = " ".join(
+            x for x in [tg_user.get("first_name"), tg_user.get("last_name")] if x
+        ).strip()
+        ins = await db.execute(
+            sa_text("""
+                INSERT INTO profiles (telegram_id, full_name, role, status, league,
+                                      season_xp, global_xp, streak_days)
+                VALUES (:tid, :fn, 'user', 'active', 'novice', 0, 0, 0)
+                RETURNING id, role, status, pnfl, full_name
+            """),
+            {"tid": telegram_id, "fn": full_name},
         )
-        db.add(user)
-        await db.flush()
+        profile = ins.mappings().first()
+
+    user = User()
+    user.id = profile["id"]
+    user.role = profile["role"]
+    user.status = profile["status"]
+    user.pnfl = profile.get("pnfl")
     return user, is_new

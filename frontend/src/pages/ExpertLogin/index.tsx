@@ -19,8 +19,16 @@ export default function ExpertLogin() {
     try {
       const res = await authApi.loginExpert(username.trim(), password)
       setToken(res.access_token)
-      const me = await authApi.getMe()
-      setUser(me)
+      setUser({
+        id: res.user_id as unknown as number,
+        role: 'expert',
+        status: 'active',
+        league: 'novice',
+        season_xp: 0,
+        global_xp: 0,
+        streak_days: 0,
+        language: 'uz',
+      } as any)
       navigate('/expert/queue', { replace: true })
     } catch (err: any) {
       const msg = err?.response?.data?.detail || 'Xatolik yuz berdi'
