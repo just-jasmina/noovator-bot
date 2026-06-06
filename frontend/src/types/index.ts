@@ -12,6 +12,9 @@ export interface User {
   telegram_username?: string
   first_name?: string
   last_name?: string
+  middle_name?: string
+  telegram_first_name?: string
+  diploma_specialty?: string
   avatar_url?: string
   league: UserLeague
   role: UserRole
