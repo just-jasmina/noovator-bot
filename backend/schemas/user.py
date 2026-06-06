@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, field_validator
-from typing import Optional
+from typing import Optional, Union
 from datetime import date, datetime
 from ..models.user import UserRole, UserLeague, UserStatus, UserGender, UserAccountStatus
 
@@ -22,7 +22,7 @@ class ExpertCreateRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    user_id: int
+    user_id: Union[int, str]
     is_registered: bool
 
 
