@@ -35,21 +35,26 @@ async def auth_telegram(payload: TelegramInitData, db: AsyncSession = Depends(ge
 @router.post("/expert/login", response_model=TokenResponse)
 async def auth_expert(payload: ExpertLoginRequest, db: AsyncSession = Depends(get_db)):
     """Login for experts using username and password."""
-    user = await authenticate_expert(db, payload.username, payload.password)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Noto'g'ri login yoki parol"
+    import traceback
+    try:
+        user = await authenticate_expert(db, payload.username, payload.password)
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Noto'g'ri login yoki parol"
+            )
+        if str(user.role) not in ("expert", "moderator", "admin"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Bu akkaunt expert huquqiga ega emas"
+            )
+        token = create_access_token(user.id)
+        return TokenResponse(
+            access_token=token,
+            user_id=str(user.id),
+            is_registered=True,
         )
-    if user.role not in (UserRole.EXPERT, UserRole.MODERATOR, UserRole.ADMIN):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Bu akkaunt expert huquqiga ega emas"
-        )
-
-    token = create_access_token(user.id)
-    return TokenResponse(
-        access_token=token,
-        user_id=user.id,
-        is_registered=True,
-    )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {traceback.format_exc()}")
