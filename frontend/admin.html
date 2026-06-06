@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tibbiyot Novatorlari — Админ-панель</title>
+<style>
+  :root{
+    --bg:#0f1419; --panel:#161c24; --panel2:#1c242e; --line:#28323e;
+    --text:#e6edf3; --dim:#8b97a4; --faint:#5c6772;
+    --accent:#3b9eff; --accent2:#2b7fd6;
+    --ok:#3fb950; --warn:#d29922; --danger:#f0564f; --rework:#a371f7;
+    --field:#0d1117; --r:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--text);
+    font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    font-size:13.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  button{font-family:inherit;cursor:pointer}
+
+  .layout{display:grid;grid-template-columns:230px 1fr;height:100vh}
+
+  /* sidebar */
+  .side{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:18px 14px}
+  .brand{display:flex;align-items:center;gap:9px;padding:0 6px 18px;border-bottom:1px solid var(--line);margin-bottom:14px}
+  .brand .mk{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#3b9eff,#2b7fd6);display:flex;align-items:center;justify-content:center;font-size:16px}
+  .brand .nm{font-weight:700;font-size:13px;letter-spacing:.02em}
+  .brand .nm small{display:block;color:var(--faint);font-weight:500;font-size:10px;letter-spacing:.06em}
+  .nav{display:flex;flex-direction:column;gap:2px}
+  .nav button{display:flex;align-items:center;gap:10px;border:none;background:none;color:var(--dim);
+    padding:9px 11px;border-radius:8px;text-align:left;font-size:13px;transition:.12s}
+  .nav button:hover{background:var(--panel2);color:var(--text)}
+  .nav button.on{background:var(--accent);color:#fff;font-weight:600}
+  .nav .ic{width:18px;text-align:center}
+  .nav .badge{margin-left:auto;background:var(--danger);color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;font-weight:700}
+  .side .who{margin-top:auto;padding-top:14px;border-top:1px solid var(--line);color:var(--faint);font-size:11px;line-height:1.6}
+  .side .who b{color:var(--dim)}
+
+  /* main */
+  .main{overflow:hidden;display:flex;flex-direction:column}
+  .topbar{display:flex;align-items:center;gap:14px;padding:14px 22px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .topbar h1{font-size:15px;margin:0;font-weight:700;letter-spacing:.02em}
+  .topbar .sp{flex:1}
+  .search{display:flex;align-items:center;gap:8px;background:var(--field);border:1px solid var(--line);border-radius:8px;padding:7px 11px;width:280px}
+  .search input{border:none;background:none;color:var(--text);outline:none;width:100%;font-family:inherit;font-size:13px}
+  .search .ic{color:var(--faint)}
+  .btn{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:8px;padding:8px 13px;font-size:12.5px;font-weight:600;transition:.12s;display:inline-flex;align-items:center;gap:7px}
+  .btn:hover{border-color:var(--accent);color:#fff}
+  .btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.pri:hover{background:var(--accent2)}
+
+  .content{flex:1;overflow:auto;padding:22px}
+
+  /* stat cards */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+  .stat .v{font-size:26px;font-weight:800;letter-spacing:-.02em}
+  .stat .l{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.07em;margin-top:3px}
+  .stat .v.c1{color:var(--accent)} .stat .v.c2{color:var(--warn)} .stat .v.c3{color:var(--ok)} .stat .v.c4{color:var(--rework)}
+
+  /* filters */
+  .filters{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+  .chip{border:1px solid var(--line);background:var(--panel);color:var(--dim);border-radius:20px;padding:6px 13px;font-size:12px;transition:.12s}
+  .chip:hover{color:var(--text)}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+
+  /* table */
+  .tbl{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+  .tbl th{text-align:left;padding:12px 14px;color:var(--faint);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid var(--line);font-weight:600;background:var(--panel2)}
+  .tbl td{padding:13px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+  .tbl tr:last-child td{border-bottom:none}
+  .tbl tbody tr{transition:.1s;cursor:pointer}
+  .tbl tbody tr:hover{background:var(--panel2)}
+  .pid{color:var(--faint);font-size:11px}
+  .pname{font-weight:600}
+  .ptags{margin-top:3px}
+  .ttag{display:inline-block;background:var(--field);border:1px solid var(--line);color:var(--dim);border-radius:5px;padding:1px 6px;font-size:10px;margin-right:4px}
+  .badge-st{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;white-space:nowrap}
+  .st-review{background:rgba(210,153,34,.15);color:var(--warn)}
+  .st-discuss{background:rgba(59,158,255,.15);color:var(--accent)}
+  .st-pilot{background:rgba(63,185,80,.15);color:var(--ok)}
+  .st-archive{background:rgba(240,86,79,.12);color:var(--danger)}
+  .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+  .sla{font-size:11px;font-weight:700}
+  .sla.ok{color:var(--ok)} .sla.warn{color:var(--warn)} .sla.bad{color:var(--danger)}
+  .vbar{display:flex;gap:3px}
+  .vbar i{width:9px;height:9px;border-radius:2px;background:var(--line);display:inline-block}
+  .vbar i.app{background:var(--ok)} .vbar i.rej{background:var(--danger)} .vbar i.rew{background:var(--rework)}
+
+  /* drawer */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:.2s;z-index:40}
+  .overlay.on{opacity:1;pointer-events:auto}
+  .drawer{position:fixed;top:0;right:0;width:560px;max-width:94vw;height:100%;background:var(--panel);
+    border-left:1px solid var(--line);transform:translateX(100%);transition:.26s cubic-bezier(.3,.8,.3,1);z-index:50;
+    display:flex;flex-direction:column}
+  .drawer.on{transform:none}
+  .dhead{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;gap:12px}
+  .dhead .x{margin-left:auto;border:none;background:var(--panel2);color:var(--dim);width:30px;height:30px;border-radius:8px;font-size:16px}
+  .dhead .x:hover{color:#fff}
+  .dbody{flex:1;overflow:auto;padding:22px}
+  .blind-toggle{display:flex;align-items:center;gap:10px;background:var(--field);border:1px solid var(--line);border-radius:9px;padding:11px 13px;margin-bottom:18px}
+  .blind-toggle .lab{flex:1;font-size:12px}
+  .blind-toggle .lab b{color:var(--warn)}
+  .switch{width:42px;height:24px;border-radius:13px;background:var(--line);position:relative;transition:.18s;flex:none}
+  .switch.on{background:var(--accent)}
+  .switch:after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.18s}
+  .switch.on:after{left:21px}
+  .author-box{background:var(--field);border:1px solid var(--line);border-radius:9px;padding:13px;margin-bottom:18px}
+  .author-box.blinded{filter:blur(5px);user-select:none;pointer-events:none}
+  .author-box .row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px}
+  .author-box .row .k{color:var(--faint)}
+  .sec{margin-bottom:18px}
+  .sec h3{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);margin:0 0 7px}
+  .sec p{margin:0;color:var(--text);font-size:13px;background:var(--field);border:1px solid var(--line);border-radius:8px;padding:11px 13px}
+  .kpi-li{background:var(--field);border:1px solid var(--line);border-radius:8px;padding:9px 12px;margin-bottom:6px;font-size:12.5px;display:flex;gap:9px}
+  .kpi-li .n{color:var(--accent);font-weight:700}
+  .files-li{display:flex;align-items:center;gap:11px;background:var(--field);border:1px solid var(--line);border-radius:8px;padding:10px 13px;margin-bottom:7px}
+  .files-li .fic{font-size:18px}
+  .files-li .fn{flex:1;font-size:12.5px}
+  .files-li .fsz{color:var(--faint);font-size:11px}
+  .files-li .dl{border:1px solid var(--line);background:var(--panel2);color:var(--accent);border-radius:7px;padding:6px 11px;font-size:11px;font-weight:700}
+  .files-li .dl:hover{border-color:var(--accent)}
+
+  /* review form */
+  .review-foot{border-top:1px solid var(--line);padding:16px 22px;background:var(--panel)}
+  .verdict{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+  .vbtn{border:1px solid var(--line);background:var(--field);color:var(--dim);border-radius:9px;padding:11px 6px;font-size:12px;font-weight:700;transition:.12s;display:flex;flex-direction:column;align-items:center;gap:5px}
+  .vbtn .vic{font-size:17px}
+  .vbtn:hover{color:var(--text)}
+  .vbtn.sel-app{border-color:var(--ok);background:rgba(63,185,80,.12);color:var(--ok)}
+  .vbtn.sel-rej{border-color:var(--danger);background:rgba(240,86,79,.12);color:var(--danger)}
+  .vbtn.sel-rew{border-color:var(--rework);background:rgba(163,113,247,.12);color:var(--rework)}
+  textarea{width:100%;border:1px solid var(--line);background:var(--field);color:var(--text);border-radius:9px;padding:11px 13px;font-family:inherit;font-size:13px;resize:vertical;min-height:90px;outline:none}
+  textarea:focus{border-color:var(--accent)}
+  .wc{display:flex;justify-content:space-between;font-size:11px;margin-top:6px}
+  .wc .cnt{font-weight:700}
+  .wc .cnt.ok{color:var(--ok)} .wc .cnt.bad{color:var(--danger)}
+  .submit-rev{width:100%;border:none;border-radius:9px;background:var(--accent);color:#fff;padding:13px;font-size:13.5px;font-weight:700;margin-top:12px;transition:.12s}
+  .submit-rev:hover{background:var(--accent2)}
+  .submit-rev:disabled{background:var(--panel2);color:var(--faint);cursor:default}
+
+  .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);background:#fff;color:#0f1419;
+    padding:12px 20px;border-radius:10px;font-weight:600;font-size:13px;opacity:0;transition:.25s;z-index:80;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .note{background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.3);border-radius:9px;padding:11px 13px;color:#d6b15c;font-size:11.5px;margin-bottom:18px;line-height:1.55}
+
+  /* gate (admin auth demo) */
+  .gate{position:fixed;inset:0;background:var(--bg);z-index:90;display:flex;align-items:center;justify-content:center}
+  .gate .card{width:360px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:28px;text-align:center}
+  .gate .mk{width:48px;height:48px;border-radius:12px;margin:0 auto 16px;background:linear-gradient(135deg,#3b9eff,#2b7fd6);display:flex;align-items:center;justify-content:center;font-size:24px}
+  .gate h2{margin:0 0 4px;font-size:16px} .gate p{color:var(--dim);font-size:12px;margin:0 0 18px}
+  .gate input{width:100%;border:1px solid var(--line);background:var(--field);color:var(--text);border-radius:9px;padding:12px;font-family:inherit;font-size:14px;text-align:center;outline:none;margin-bottom:12px}
+  .gate input:focus{border-color:var(--accent)}
+  .gate .hint{color:var(--faint);font-size:11px;margin-top:14px;line-height:1.5}
+</style>
+</head>
+<body>
+
+<!-- ADMIN AUTH GATE (DEMO) -->
+<div class="gate" id="gate">
+  <div class="card">
+    <div class="mk">🛡️</div>
+    <h2>Админ-панель</h2>
+    <p>Tibbiyot Novatorlari</p>
+    <input id="gateId" placeholder="Ваш Telegram ID" inputmode="numeric">
+    <button class="btn pri" style="width:100%;justify-content:center" onclick="gateEnter()">Войти</button>
+    <div class="hint">⚠️ Демо-вход. В проде доступ проверяется на backend по initData: сервер сверяет ваш Telegram&nbsp;ID со списком админов и только тогда отдаёт данные. Здесь подойдёт любой из разрешённых ID.</div>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <aside class="side">
+    <div class="brand">
+      <div class="mk">⚕️</div>
+      <div class="nm">Tibbiyot<small>NOVATORLARI · ADMIN</small></div>
+    </div>
+    <nav class="nav">
+      <button class="on"><span class="ic">📋</span> Проекты <span class="badge" id="navBadge">0</span></button>
+      <button onclick="toast('Раздел появится позже')"><span class="ic">👥</span> Пользователи</button>
+      <button onclick="toast('Раздел появится позже')"><span class="ic">🧪</span> Эксперты</button>
+      <button onclick="toast('Раздел появится позже')"><span class="ic">📊</span> Аналитика</button>
+      <button onclick="toast('Раздел появится позже')"><span class="ic">⚖️</span> Модерация</button>
+    </nav>
+    <div class="who">
+      <div>Вы вошли как:</div>
+      <div><b id="whoId">—</b></div>
+      <div style="margin-top:6px"><a href="#" onclick="logout();return false" style="color:var(--accent);text-decoration:none">Выйти</a></div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="topbar">
+      <h1>Поданные проекты</h1>
+      <div class="sp"></div>
+      <div class="search">
+        <span class="ic">🔍</span>
+        <input id="searchInput" placeholder="Поиск по названию, ID, тегу…" oninput="renderTable()">
+      </div>
+      <button class="btn" onclick="exportCSV()">⬇ Экспорт CSV</button>
+    </div>
+
+    <div class="content">
+      <div class="stats" id="stats"></div>
+
+      <div class="filters" id="filters"></div>
+
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th style="width:38%">Проект</th>
+            <th>Статус</th>
+            <th>Бюджет</th>
+            <th>SLA</th>
+            <th>Голоса (3)</th>
+            <th>Подан</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<!-- DRAWER -->
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="dhead">
+    <div>
+      <div class="pid" id="dPid"></div>
+      <div style="font-weight:700;font-size:16px;margin-top:2px" id="dName"></div>
+      <div class="ptags" id="dTags" style="margin-top:6px"></div>
+    </div>
+    <button class="x" onclick="closeDrawer()">×</button>
+  </div>
+
+  <div class="dbody" id="dBody"><!-- filled dynamically --></div>
+
+  <div class="review-foot" id="reviewFoot">
+    <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);margin:0 0 9px">Экспертная оценка</h3>
+    <div class="verdict">
+      <button class="vbtn" data-v="app" onclick="pickVerdict('app')"><span class="vic">✓</span>Одобрить</button>
+      <button class="vbtn" data-v="rew" onclick="pickVerdict('rew')"><span class="vic">↻</span>На доработку</button>
+      <button class="vbtn" data-v="rej" onclick="pickVerdict('rej')"><span class="vic">✕</span>Отклонить</button>
+    </div>
+    <textarea id="reviewText" placeholder="Рецензия обязательна: минимум 150 слов. Обоснуйте решение — польза/бюджет/влияние, либо чёткий чек-лист доработок." oninput="onReviewInput()"></textarea>
+    <div class="wc">
+      <span style="color:var(--faint)">Минимум 150 слов</span>
+      <span class="cnt bad" id="wordCnt">0 / 150 слов</span>
+    </div>
+    <button class="submit-rev" id="submitRev" onclick="submitReview()" disabled>Отправить решение</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ========== ADMIN ALLOWLIST (DEMO ONLY) ==========
+   В реальном продукте этот список и проверка ОБЯЗАНЫ быть на backend.
+   Сервер по initData сверяет user_id с этим списком и только тогда отдаёт данные.
+   Здесь — лишь демонстрация UI. Вставь сюда Telegram ID админов. */
+const ADMIN_IDS = ["123456789", "987654321"]; // ← замени на реальные ID
+/* ================================================= */
+
+/* ---------- mock data ---------- */
+const TAGNAMES=["Орг. здравоохранения","IT и Цифровизация","Финансы","Хирургия","Мед. право","Фармакология","Педиатрия","Медтехника","ИИ","Эпидемиология","Образование","Лаборатория"];
+const COSTS=["Деньги не нужны","До 10 млн сум","До 100 млн сум","Более 100 млн сум"];
+
+const PROJECTS=[
+  {id:"PRJ-1042", name:"Автоматизация учёта реагентов в лаборатории", tags:[11,1], status:"review", sla:3, cost:1,
+   author:{fio:"Каримов А. Б.", league:"Любитель", region:"Ташкент", work:"РСЦ Лаборатория"},
+   pitch:"Система штрих-кодов и авто-списания реагентов: меньше просрочки и ручного учёта.",
+   prob:"Сейчас учёт реагентов ведётся в тетрадях и Excel. Из-за этого до 15% реагентов списываются просроченными, а инвентаризация занимает дни. Нет прозрачности остатков по сменам.",
+   sol:"Каждая упаковка получает штрих-код при поступлении. Сканер на рабочем месте фиксирует приход и расход, система автоматически считает остаток, предупреждает о приближении срока годности и формирует заявку на закупку.",
+   aud:["Лаборанты","Управленцы"], kpis:["Сокращение списания просрочки с 15% до 3%","Время инвентаризации: с 2 дней до 2 часов"],
+   eff:"Экономия до 40 млн сум/год на реагентах в одной лаборатории, высвобождение 16 человеко-часов в месяц.",
+   need:"Закупка 6 сканеров, лицензия ПО на год, обучение персонала.", time:"1–3 месяца",
+   files:[{n:"Концепция_системы.pdf",s:"248 КБ"},{n:"Смета_реагенты.xlsx",s:"56 КБ"}], votes:[]},
+
+  {id:"PRJ-1039", name:"Телемедицинские консультации для отдалённых районов", tags:[1,6], status:"review", sla:6, cost:2,
+   author:{fio:"Юсупова Д. Р.", league:"Профессионал", region:"Наманган", work:"ЦРБ Касансай"},
+   pitch:"Видеосвязь между сельскими ФАП и областными специалистами — без поездок пациентов.",
+   prob:"Жители отдалённых районов едут 3–4 часа до областного центра ради 15-минутной консультации. Часть откладывает визит и запускает болезнь.",
+   sol:"На ФАП устанавливается терминал с защищённой видеосвязью и базовым диагностическим набором. Областной специалист консультирует удалённо, фельдшер ассистирует на месте.",
+   aud:["Пациенты","Врачи"], kpis:["Снижение поездок пациентов на 60%","Время до консультации специалиста: с 5 дней до 1 дня"],
+   eff:"Раннее выявление, снижение осложнений; экономия на транспорте и койко-днях.",
+   need:"15 терминалов, защищённый канал связи, обучение фельдшеров.", time:"до 6 месяцев",
+   files:[{n:"Описание_телемед.pdf",s:"312 КБ"}], votes:[{v:"app"}]},
+
+  {id:"PRJ-1031", name:"ИИ-скрининг рентгена грудной клетки", tags:[8,3], status:"discuss", sla:0, cost:3,
+   author:{fio:"Алиев Т. М.", league:"Новатор", region:"Самарканд", work:"Областной онкоцентр"},
+   pitch:"Нейросеть-ассистент рентгенолога: подсветка подозрительных зон на снимке за секунды.",
+   prob:"Дефицит рентгенологов: снимки ждут описания по 2–3 дня, ранние патологии иногда пропускаются.",
+   sol:"Модель предварительно анализирует снимок, выделяет зоны риска и сортирует очередь по приоритету. Врач принимает финальное решение.",
+   aud:["Врачи","Пациенты"], kpis:["Время описания снимка: с 2 дней до 4 часов","Выявляемость ранних патологий +18%"],
+   eff:"Ускорение диагностики, разгрузка рентгенологов, спасённые жизни за счёт раннего выявления.",
+   need:"GPU-сервер, обучение модели на локальных данных, интеграция с PACS.", time:"более 6 месяцев",
+   files:[{n:"Питч_AI_скрининг.pdf",s:"1.2 МБ"},{n:"Метрики_модели.xlsx",s:"88 КБ"}], votes:[{v:"app"},{v:"app"}]},
+
+  {id:"PRJ-1024", name:"Электронная очередь в поликлиниках", tags:[1,0], status:"pilot", sla:0, cost:1,
+   author:{fio:"Рахимова С. К.", league:"Профессионал", region:"Ташкент", work:"Поликлиника №12"},
+   pitch:"Запись и живая очередь через Telegram-бот — без толпы в коридорах.",
+   prob:"Очереди в коридорах, конфликты, потерянные талоны, неравномерная нагрузка на врачей.",
+   sol:"Пациент берёт талон в боте, видит свою позицию и примерное время. Табло у кабинета синхронизировано.",
+   aud:["Пациенты","Управленцы"], kpis:["Среднее время ожидания: с 50 до 18 мин","Жалобы на очереди −70%"],
+   eff:"Снижение нагрузки на регистратуру, рост удовлетворённости пациентов.",
+   need:"Внедрено в пилоте, расходы на табло и доработку бота.", time:"1–3 месяца",
+   files:[{n:"Отчёт_пилот.pdf",s:"420 КБ"}], votes:[{v:"app"},{v:"app"},{v:"app"}]},
+
+  {id:"PRJ-1018", name:"Мобильный учёт вакцинации детей", tags:[6,1], status:"archive", sla:0, cost:0,
+   author:{fio:"Назаров И. Х.", league:"Новичок", region:"Бухара", work:"—"},
+   pitch:"Приложение для патронажных медсестёр: график прививок и напоминания родителям.",
+   prob:"Бумажные карты прививок теряются, родители забывают сроки, охват падает.",
+   sol:"Медсестра ведёт цифровую карту, родителям приходят напоминания, формируется отчёт по охвату.",
+   aud:["Медсёстры","Пациенты"], kpis:["Охват вакцинации +12%"],
+   eff:"Рост охвата, меньше бумажной работы.",
+   need:"Разработка приложения, планшеты для медсестёр.", time:"до 6 месяцев",
+   files:[{n:"Идея_вакцинация.docx",s:"34 КБ"}], votes:[{v:"rej"},{v:"rej"}]},
+];
+
+const STATUS_META={
+  review:{label:"На экспертизе", cls:"st-review"},
+  discuss:{label:"Обсуждение", cls:"st-discuss"},
+  pilot:{label:"Пилот", cls:"st-pilot"},
+  archive:{label:"Архив", cls:"st-archive"},
+};
+
+/* ---------- state ---------- */
+let filterStatus="all";
+let current=null;
+let blindOn=true;
+let verdict=null;
+
+/* ---------- gate ---------- */
+function gateEnter(){
+  const id=document.getElementById('gateId').value.trim();
+  if(!id){ toast("Введите Telegram ID"); return; }
+  if(!ADMIN_IDS.includes(id)){
+    toast("ID не в списке админов (демо)");
+    return;
+  }
+  document.getElementById('whoId').textContent="ID "+id;
+  document.getElementById('gate').style.display="none";
+  initApp();
+}
+function logout(){ location.reload(); }
+document.getElementById('gateId').addEventListener('keydown',e=>{ if(e.key==='Enter')gateEnter(); });
+
+/* ---------- init ---------- */
+function initApp(){ renderStats(); renderFilters(); renderTable(); }
+
+function renderStats(){
+  const c={total:PROJECTS.length, review:0, discuss:0, pilot:0};
+  PROJECTS.forEach(p=>{ if(p.status==='review')c.review++; if(p.status==='discuss')c.discuss++; if(p.status==='pilot')c.pilot++; });
+  document.getElementById('stats').innerHTML=`
+    <div class="stat"><div class="v c1">${c.total}</div><div class="l">Всего проектов</div></div>
+    <div class="stat"><div class="v c2">${c.review}</div><div class="l">На экспертизе</div></div>
+    <div class="stat"><div class="v c3">${c.discuss}</div><div class="l">В обсуждении</div></div>
+    <div class="stat"><div class="v c4">${c.pilot}</div><div class="l">В пилоте</div></div>`;
+  document.getElementById('navBadge').textContent=c.review;
+}
+
+function renderFilters(){
+  const defs=[["all","Все"],["review","На экспертизе"],["discuss","Обсуждение"],["pilot","Пилот"],["archive","Архив"]];
+  document.getElementById('filters').innerHTML=defs.map(([k,l])=>
+    `<button class="chip ${filterStatus===k?'on':''}" onclick="setFilter('${k}')">${l}</button>`).join('');
+}
+function setFilter(k){ filterStatus=k; renderFilters(); renderTable(); }
+
+function renderTable(){
+  const q=document.getElementById('searchInput').value.toLowerCase().trim();
+  const rows=PROJECTS.filter(p=>{
+    if(filterStatus!=='all'&&p.status!==filterStatus)return false;
+    if(q){ const hay=(p.id+' '+p.name+' '+p.tags.map(t=>TAGNAMES[t]).join(' ')).toLowerCase(); if(!hay.includes(q))return false; }
+    return true;
+  });
+  const tb=document.getElementById('tbody');
+  if(!rows.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--faint);padding:30px">Ничего не найдено</td></tr>'; return; }
+  tb.innerHTML=rows.map(p=>{
+    const sm=STATUS_META[p.status];
+    const slaHtml = p.status==='review'
+      ? `<span class="sla ${p.sla<=2?'bad':p.sla<=4?'warn':'ok'}">${p.sla} дн. до дедлайна</span>`
+      : '<span style="color:var(--faint)">—</span>';
+    const votes=[0,1,2].map(i=>{ const v=p.votes[i]; const c=v?(v.v==='app'?'app':v.v==='rej'?'rej':'rew'):''; return `<i class="${c}"></i>`; }).join('');
+    return `<tr onclick="openDrawer('${p.id}')">
+      <td><div class="pname">${p.name}</div><div class="pid">${p.id}</div>
+        <div class="ptags">${p.tags.map(t=>`<span class="ttag">#${TAGNAMES[t]}</span>`).join('')}</div></td>
+      <td><span class="badge-st ${sm.cls}"><span class="dot"></span>${sm.label}</span></td>
+      <td style="font-size:12px">${COSTS[p.cost]}</td>
+      <td>${slaHtml}</td>
+      <td><div class="vbar">${votes}</div></td>
+      <td style="color:var(--faint);font-size:12px">${randDate()}</td>
+    </tr>`;
+  }).join('');
+}
+function randDate(){ const d=new Date(Date.now()-Math.random()*12*86400000); return d.toLocaleDateString('ru-RU'); }
+
+/* ---------- drawer ---------- */
+function openDrawer(id){
+  current=PROJECTS.find(p=>p.id===id); if(!current)return;
+  blindOn=true; verdict=null;
+  document.getElementById('dPid').textContent=current.id;
+  document.getElementById('dName').textContent=current.name;
+  document.getElementById('dTags').innerHTML=current.tags.map(t=>`<span class="ttag">#${TAGNAMES[t]}</span>`).join('');
+  renderDrawerBody();
+  // reset review form
+  document.querySelectorAll('.vbtn').forEach(b=>b.className='vbtn');
+  document.getElementById('reviewText').value='';
+  onReviewInput();
+  // hide review form for non-review statuses
+  document.getElementById('reviewFoot').style.display = current.status==='review' ? '' : 'none';
+  document.getElementById('overlay').classList.add('on');
+  document.getElementById('drawer').classList.add('on');
+}
+function closeDrawer(){ document.getElementById('overlay').classList.remove('on'); document.getElementById('drawer').classList.remove('on'); }
+
+function renderDrawerBody(){
+  const p=current;
+  const a=p.author;
+  document.getElementById('dBody').innerHTML=`
+    <div class="blind-toggle">
+      <div class="lab"><b>Blind Review</b> — данные автора скрыты. Оценивайте только идею. Можно снять анонимность как админ.</div>
+      <div class="switch ${blindOn?'on':''}" onclick="toggleBlind()"></div>
+    </div>
+    <div class="author-box ${blindOn?'blinded':''}">
+      <div class="row"><span class="k">Автор</span><span>${a.fio}</span></div>
+      <div class="row"><span class="k">Лига</span><span>${a.league}</span></div>
+      <div class="row"><span class="k">Регион</span><span>${a.region}</span></div>
+      <div class="row"><span class="k">Место работы</span><span>${a.work}</span></div>
+    </div>
+
+    <div class="sec"><h3>Кратко (pitch)</h3><p>${esc(p.pitch)}</p></div>
+    <div class="sec"><h3>Проблема</h3><p>${esc(p.prob)}</p></div>
+    <div class="sec"><h3>Решение</h3><p>${esc(p.sol)}</p></div>
+    <div class="sec"><h3>Аудитория</h3><p>${p.aud.join(', ')}</p></div>
+    <div class="sec"><h3>KPI</h3>${p.kpis.map((k,i)=>`<div class="kpi-li"><span class="n">${i+1}</span><span>${esc(k)}</span></div>`).join('')}</div>
+    <div class="sec"><h3>Ожидаемый эффект</h3><p>${esc(p.eff)}</p></div>
+    <div class="sec"><h3>Ресурсы</h3><p>${COSTS[p.cost]} · ${esc(p.need)} · срок: ${p.time}</p></div>
+    <div class="sec"><h3>Прикреплённые файлы</h3>
+      ${p.files.map(f=>`<div class="files-li"><span class="fic">📄</span><span class="fn">${f.n}</span><span class="fsz">${f.s}</span><button class="dl" onclick="downloadFile('${f.n}')">⬇ Скачать</button></div>`).join('')}
+    </div>`;
+}
+function toggleBlind(){
+  blindOn=!blindOn;
+  document.querySelector('.switch').classList.toggle('on',blindOn);
+  document.querySelector('.author-box').classList.toggle('blinded',blindOn);
+  if(!blindOn) toast("Анонимность снята (действие записано в audit-log)");
+}
+
+/* ---------- review ---------- */
+function pickVerdict(v){
+  verdict=v;
+  document.querySelectorAll('.vbtn').forEach(b=>{
+    b.className='vbtn';
+    if(b.dataset.v===v) b.classList.add('sel-'+v);
+  });
+  onReviewInput();
+}
+function wordCount(s){ return s.trim()?s.trim().split(/\s+/).length:0; }
+function onReviewInput(){
+  const wc=wordCount(document.getElementById('reviewText').value);
+  const el=document.getElementById('wordCnt');
+  el.textContent=wc+" / 150 слов";
+  el.className="cnt "+(wc>=150?'ok':'bad');
+  document.getElementById('submitRev').disabled=!(verdict && wc>=150);
+}
+function submitReview(){
+  const wc=wordCount(document.getElementById('reviewText').value);
+  if(!verdict || wc<150){ toast("Нужен вердикт и рецензия 150+ слов"); return; }
+  // record vote (mock)
+  if(current.votes.length<3) current.votes.push({v:verdict});
+  const names={app:"Одобрено",rej:"Отклонено",rew:"На доработку"};
+  toast("Решение записано: "+names[verdict]+" · "+current.votes.length+"/3 голосов");
+  // majority logic (mock display)
+  if(current.votes.length===3){
+    const app=current.votes.filter(v=>v.v==='app').length;
+    const rej=current.votes.filter(v=>v.v==='rej').length;
+    if(app>=2) current.status='discuss';
+    else if(rej>=2) current.status='archive';
+    else current.status='review'; // возврат автору — упрощённо
+    renderStats();
+  }
+  renderTable();
+  closeDrawer();
+}
+
+/* ---------- downloads ---------- */
+function downloadFile(name){
+  // DEMO: реальные файлы лежат в защищённом S3 на backend; здесь — заглушка.
+  const blob=new Blob(["Демо-файл проекта: "+name+"\n\nВ реальном продукте здесь будет настоящий документ из защищённого хранилища."],{type:'text/plain'});
+  triggerDownload(blob, name.replace(/\.[^.]+$/,'')+"_demo.txt");
+  toast("Скачивание (демо): "+name);
+}
+function exportCSV(){
+  const head=["ID","Название","Статус","Бюджет","Теги","Голосов","Файлов"];
+  const rows=PROJECTS.map(p=>[
+    p.id, p.name, STATUS_META[p.status].label, COSTS[p.cost],
+    p.tags.map(t=>TAGNAMES[t]).join(" / "), p.votes.length+"/3", p.files.length
+  ]);
+  const csv=[head,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(",")).join("\r\n");
+  const blob=new Blob(["\uFEFF"+csv],{type:'text/csv;charset=utf-8'}); // BOM для Excel
+  triggerDownload(blob, "projects_export.csv");
+  toast("Экспортировано "+PROJECTS.length+" проектов");
+}
+function triggerDownload(blob, filename){
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click();
+  document.body.removeChild(a); setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+/* ---------- utils ---------- */
+function esc(s){ return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2400); }
+</script>
+</body>
+</html>

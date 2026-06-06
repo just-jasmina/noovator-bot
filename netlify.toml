@@ -1,0 +1,14 @@
+[build]
+  publish = "frontend"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "ALLOWALL"
+    X-Content-Type-Options = "nosniff"
+    Content-Security-Policy = "frame-ancestors *"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

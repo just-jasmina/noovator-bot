@@ -1,0 +1,117 @@
+import hashlib
+import hmac
+import json
+from datetime import datetime, timedelta, timezone
+from urllib.parse import unquote, parse_qsl
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from ..config import settings
+from ..models.user import User, UserRole
+
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def verify_telegram_init_data(init_data: str) -> dict | None:
+    """
+    Verify Telegram initData signature (HMAC-SHA256).
+    Returns parsed user dict or None if invalid.
+    """
+    parsed = dict(parse_qsl(unquote(init_data), keep_blank_values=True))
+    received_hash = parsed.pop("hash", None)
+    if not received_hash:
+        return None
+
+    data_check_string = "\n".join(
+        f"{k}={v}" for k, v in sorted(parsed.items())
+    )
+
+    secret_key = hmac.new(
+        b"WebAppData",
+        settings.BOT_TOKEN.encode(),
+        hashlib.sha256,
+    ).digest()
+
+    computed_hash = hmac.new(
+        secret_key,
+        data_check_string.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+    if not hmac.compare_digest(computed_hash, received_hash):
+        return None
+
+    # Check auth_date freshness (24 hours)
+    auth_date = int(parsed.get("auth_date", 0))
+    if datetime.now(timezone.utc).timestamp() - auth_date > 86400:
+        return None
+
+    user_data = json.loads(parsed.get("user", "{}"))
+    return user_data
+
+
+def create_access_token(user_id) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    payload = {"sub": str(user_id), "exp": expire}
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def decode_access_token(token: str) -> str | None:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        return payload["sub"]  # str — works for both int and UUID
+    except (JWTError, KeyError):
+        return None
+
+
+def hash_password(password: str) -> str:
+    return _pwd_context.hash(password)
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return _pwd_context.verify(plain, hashed)
+
+
+async def authenticate_expert(db: AsyncSession, username: str, password: str) -> User | None:
+    # Try users table first (local/SQLAlchemy), fallback to profiles (Supabase-native)
+    result = await db.execute(select(User).where(User.expert_username == username))
+    user = result.scalar_one_or_none()
+    if user and user.expert_password_hash and verify_password(password, user.expert_password_hash):
+        return user
+    # Supabase native: query profiles table directly
+    from sqlalchemy import text
+    row = await db.execute(
+        text("SELECT id, expert_password_hash, role, status FROM profiles WHERE expert_username = :u LIMIT 1"),
+        {"u": username},
+    )
+    profile = row.mappings().first()
+    if not profile or not profile["expert_password_hash"]:
+        return None
+    if not verify_password(password, profile["expert_password_hash"]):
+        return None
+    # Wrap profile as a User-like object for token creation
+    fake_user = User()
+    fake_user.id = profile["id"]
+    fake_user.role = profile["role"]
+    fake_user.status = profile.get("status", "active")
+    fake_user.expert_username = username
+    return fake_user
+
+
+async def get_or_create_user(db: AsyncSession, tg_user: dict) -> tuple[User, bool]:
+    """Returns (user, is_new)."""
+    telegram_id = tg_user["id"]
+    result = await db.execute(select(User).where(User.telegram_id == telegram_id))
+    user = result.scalar_one_or_none()
+    is_new = user is None
+    if is_new:
+        user = User(
+            telegram_id=telegram_id,
+            telegram_username=tg_user.get("username"),
+            telegram_first_name=tg_user.get("first_name"),
+            telegram_last_name=tg_user.get("last_name"),
+        )
+        db.add(user)
+        await db.flush()
+    return user, is_new

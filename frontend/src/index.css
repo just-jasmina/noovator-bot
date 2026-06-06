@@ -1,0 +1,129 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --tg-theme-bg-color: #ffffff;
+    --tg-theme-text-color: #1a1a1a;
+    --tg-theme-hint-color: #6b7280;
+    --tg-theme-link-color: #2563eb;
+    --tg-theme-button-color: #2563eb;
+    --tg-theme-button-text-color: #ffffff;
+    --tg-theme-secondary-bg-color: #f3f4f6;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+    box-sizing: border-box;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--tg-theme-bg-color);
+    color: var(--tg-theme-text-color);
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #root {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden;
+  }
+
+  .btn-primary {
+    @apply bg-primary-600 text-white font-semibold py-3 px-6 rounded-xl
+           active:scale-95 transition-all duration-150 disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply bg-gray-100 text-gray-700 font-semibold py-3 px-6 rounded-xl
+           active:scale-95 transition-all duration-150;
+  }
+
+  .input {
+    @apply w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3
+           text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+           transition-all duration-150;
+  }
+
+  .tag {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium;
+  }
+
+  .league-badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold;
+  }
+
+  .bottom-nav-item {
+    @apply flex flex-col items-center gap-0.5 py-2 px-3 text-gray-400
+           transition-colors duration-150 cursor-pointer;
+  }
+
+  .bottom-nav-item.active {
+    @apply text-primary-600;
+  }
+
+  .page-container {
+    @apply flex-1 overflow-y-auto pb-24;
+  }
+
+  .section-title {
+    @apply text-lg font-bold text-gray-900 mb-3;
+  }
+
+  .xp-bar {
+    @apply h-2 bg-gray-200 rounded-full overflow-hidden;
+  }
+
+  .xp-bar-fill {
+    @apply h-full bg-gradient-to-r from-primary-500 to-teal-500 rounded-full transition-all duration-700;
+  }
+}
+
+@layer utilities {
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .glass {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+}
+
+/* League badge gradients */
+.badge-novice { background: #e5e7eb; color: #374151; }
+.badge-amateur { background: linear-gradient(135deg, #fbbf24, #d97706); color: white; }
+.badge-professional { background: linear-gradient(135deg, #818cf8, #4f46e5); color: white; }
+.badge-innovator { background: linear-gradient(135deg, #fde68a, #f59e0b, #d97706); color: #78350f; }
+
+/* Status chips */
+.status-review { @apply bg-blue-100 text-blue-700; }
+.status-crowdsource { @apply bg-green-100 text-green-700; }
+.status-incubation { @apply bg-purple-100 text-purple-700; }
+.status-pilot { @apply bg-orange-100 text-orange-700; }
+.status-scaled { @apply bg-emerald-100 text-emerald-700; }
+.status-rejected { @apply bg-red-100 text-red-700; }
+.status-revision { @apply bg-yellow-100 text-yellow-700; }
