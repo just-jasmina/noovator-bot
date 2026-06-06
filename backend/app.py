@@ -11,8 +11,16 @@ from .routers import auth, users, projects, reviews, comments, leaderboard, ment
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await create_tables()
-    await seed_xp_rules()
+    try:
+        await create_tables()
+    except Exception as e:
+        import logging
+        logging.warning(f"create_tables skipped: {e}")
+    try:
+        await seed_xp_rules()
+    except Exception as e:
+        import logging
+        logging.warning(f"seed_xp_rules skipped: {e}")
     yield
 
 

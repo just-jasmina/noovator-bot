@@ -10,16 +10,18 @@ Run:
 
 import asyncio
 import sys
+import os
 import uvicorn
 from loguru import logger
 
 
 async def run_api():
+    port = int(os.environ.get("PORT", 8000))
     config = uvicorn.Config(
         "backend.app:app",
         host="0.0.0.0",
-        port=8000,
-        reload=True,
+        port=port,
+        reload=False,
         log_level="info",
     )
     server = uvicorn.Server(config)
