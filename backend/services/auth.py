@@ -74,29 +74,35 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 async def authenticate_expert(db: AsyncSession, username: str, password: str) -> User | None:
-    # Try users table first (local/SQLAlchemy), fallback to profiles (Supabase-native)
-    result = await db.execute(select(User).where(User.expert_username == username))
-    user = result.scalar_one_or_none()
-    if user and user.expert_password_hash and verify_password(password, user.expert_password_hash):
-        return user
-    # Supabase native: query profiles table directly
     from sqlalchemy import text
-    row = await db.execute(
-        text("SELECT id, expert_password_hash, role, status FROM profiles WHERE expert_username = :u LIMIT 1"),
-        {"u": username},
-    )
-    profile = row.mappings().first()
-    if not profile or not profile["expert_password_hash"]:
-        return None
-    if not verify_password(password, profile["expert_password_hash"]):
-        return None
-    # Wrap profile as a User-like object for token creation
-    fake_user = User()
-    fake_user.id = profile["id"]
-    fake_user.role = profile["role"]
-    fake_user.status = profile.get("status", "active")
-    fake_user.expert_username = username
-    return fake_user
+    # Query profiles table directly (Supabase)
+    try:
+        row = await db.execute(
+            text("SELECT id, expert_password_hash, role, status FROM profiles WHERE expert_username = :u LIMIT 1"),
+            {"u": username},
+        )
+        profile = row.mappings().first()
+    except Exception:
+        profile = None
+
+    if profile and profile["expert_password_hash"] and verify_password(password, profile["expert_password_hash"]):
+        fake_user = User()
+        fake_user.id = profile["id"]
+        fake_user.role = profile["role"]
+        fake_user.status = profile.get("status", "active")
+        fake_user.expert_username = username
+        return fake_user
+
+    # Fallback: try users table
+    try:
+        result = await db.execute(select(User).where(User.expert_username == username))
+        user = result.scalar_one_or_none()
+        if user and user.expert_password_hash and verify_password(password, user.expert_password_hash):
+            return user
+    except Exception:
+        pass
+
+    return None
 
 
 async def get_or_create_user(db: AsyncSession, tg_user: dict) -> tuple[User, bool]:
