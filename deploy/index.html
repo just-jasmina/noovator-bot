@@ -721,7 +721,11 @@ function go(screen, opts={}) {
   CS = screen;
   const noNav = ['loading','welcome','register'].includes(screen);
   $('nav').classList.toggle('hidden', noNav);
-  $('fab').classList.toggle('show', screen === 'feed');
+  const isObserver = CU?.role === 'admin';  // admin = read-only observer
+  // Admin cannot submit projects: block the submit screen and hide the action UI.
+  if (screen === 'submit' && isObserver) { toast('Администратор — наблюдатель, подача проектов недоступна'); el.classList.remove('on'); return go('feed'); }
+  $('nav-submit')?.classList.toggle('hidden', isObserver);
+  $('fab').classList.toggle('show', screen === 'feed' && !isObserver);
   ['feed','submit','lb','notif','profile'].forEach(n => {
     const btn = $('nav-' + n);
     if (btn) btn.classList.toggle('on', n === screen || (n==='feed' && screen==='project'));
@@ -819,7 +823,7 @@ async function doLogin() {
       await ensureExpertRole(data.id); CU.role = 'expert';
     }
     checkUnreadNotifs(); subscribeNotifications();
-    const isExpert = data.role === 'expert' || data.role === 'admin';
+    const isExpert = data.role === 'expert';  // admin is observer -> feed, not review
     go((isExpertLaunch || isExpert) ? 'review' : 'feed');
     handleDeepLink();
   } catch(e) {
@@ -1631,7 +1635,7 @@ async function loadProfile() {
       <div class="section-h">Привилегии лиги ${badge} ${lgName}</div>
       <div class="card-simple"><ul style="padding-left:18px">${privs}</ul></div>
 
-      ${CU.role==='expert'||CU.role==='admin' ? `<button class="btn ghost sm" onclick="go('review')" style="margin-bottom:12px">🔍 Очередь на экспертизу</button>` : ''}
+      ${CU.role==='expert' ? `<button class="btn ghost sm" onclick="go('review')" style="margin-bottom:12px">🔍 Очередь на экспертизу</button>` : ''}
       ${CU.role==='admin' ? `<button class="btn sm" onclick="go('admin')" style="margin-bottom:12px;background:#5469d4">⚙️ Панель администратора</button>` : ''}
 
       <div class="section-h">Мои проекты</div>
@@ -1694,7 +1698,7 @@ async function awardXP(amount, reason, icon='⭐') {
 /* ===== EXPERT REVIEW ===== */
 async function loadReviews() {
   const body = $('review-body');
-  if (!CU || (CU.role !== 'expert' && CU.role !== 'admin')) {
+  if (!CU || CU.role !== 'expert') {
     body.innerHTML = '<div class="empty"><div class="empty-ic">🔒</div><div class="empty-title">Только для экспертов</div><p class="text-hint text-sm">Обратитесь к администратору для получения роли эксперта.</p></div>';
     return;
   }
@@ -1836,10 +1840,7 @@ async function loadAdmin(tab='users') {
             <div class="text-hint" style="font-size:11px">${esc(u.phone||'')} • ${L().leagues[u.league]}</div>
             <div class="text-hint" style="font-size:11px">${fmt(u.season_xp)} XP сезон</div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:4px">
-            ${u.role!=='expert'?`<button class="btn-xs bx-ok" onclick="setRole('${u.id}','expert')">Эксперт</button>`:'<span class="btn-xs bx-ok">✓ Эксперт</span>'}
-            ${u.role!=='admin'?`<button class="btn-xs bx-warn" onclick="setRole('${u.id}','admin')">Админ</button>`:'<span class="btn-xs bx-warn">✓ Админ</span>'}
-          </div>
+          <span class="btn-xs ${u.role==='admin'?'bx-warn':u.role==='expert'?'bx-ok':''}">${u.role==='admin'?'Админ':u.role==='expert'?'Эксперт':'Пользователь'}</span>
         </div>`).join('');
     } else {
       const { data } = await sb.from('projects').select('id,title,status,created_at,profiles!projects_user_id_fkey(full_name)').order('created_at',{ascending:false});
@@ -1850,11 +1851,6 @@ async function loadAdmin(tab='users') {
             <div class="text-hint" style="font-size:11px">${esc(p.profiles?.full_name||'—')} • ${fmtDate(p.created_at)}</div>
           </div>
           <span class="status-badge s-${esc(p.status)}">${L().statuses[p.status]||p.status}</span>
-          <div style="display:flex;gap:4px;margin-left:8px">
-            <button class="btn-xs bx-ok" onclick="setStatus('${p.id}','approved')">✓</button>
-            <button class="btn-xs bx-warn" onclick="setStatus('${p.id}','pilot')">🚀</button>
-            <button class="btn-xs bx-danger" onclick="setStatus('${p.id}','rejected')">✗</button>
-          </div>
         </div>`).join('');
     }
   } catch(e) { body.innerHTML = `<p style="color:var(--danger);padding:16px">${esc(e.message)}</p>`; }
@@ -1990,16 +1986,9 @@ async function renderAdminStats(body) {
     </div>`;
 }
 
-async function setRole(userId, role) {
-  await sb.from('profiles').update({role}).eq('id',userId);
-  toast('Роль обновлена: ' + role);
-  loadAdmin('users');
-}
-async function setStatus(projId, status) {
-  await sb.from('projects').update({status}).eq('id',projId);
-  toast('Статус обновлён: ' + L().statuses[status]);
-  loadAdmin('projects');
-}
+// Admin is an OBSERVER ONLY — role assignment and project moderation are disabled.
+async function setRole() { toast('Администратор — наблюдатель: назначение ролей недоступно'); }
+async function setStatus() { toast('Администратор — наблюдатель: управление проектами недоступно'); }
 
 /* ===== SETUP ERROR ===== */
 function showSetupError() {
