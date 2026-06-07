@@ -999,7 +999,9 @@ async function loadFeed() {
   try {
     let q = sb.from('projects')
       .select('*, profiles!projects_user_id_fkey(full_name,league,season_xp)')
-      .in('status',['approved','pilot','scale','under_review','rejected'])
+      // under_review projects are with experts and must NOT appear in the public feed;
+      // they surface only after a decision (rejected -> published for discussion, or approved).
+      .in('status',['approved','pilot','scale','rejected'])
       .limit(30);
     if (feedTag !== null) q = q.overlaps('tags', [CANON_TAGS[feedTag], I18N.ru.tags[feedTag], I18N.uz.tags[feedTag]]);
     q = feedSort === 'popular' ? q.order('likes_count',{ascending:false}) : q.order('created_at',{ascending:false});
