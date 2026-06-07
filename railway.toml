@@ -2,6 +2,9 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "python main.py --api"
+# Run BOTH the FastAPI API and the Telegram bot in one process (asyncio.gather).
+# Keep replicas = 1 so only a single bot instance polls Telegram (avoids getUpdates conflicts).
+startCommand = "python main.py"
+numReplicas = 1
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3

@@ -571,6 +571,33 @@ const I18N = {
 };
 let LANG = 'ru';
 const L = () => I18N[LANG];
+
+/* ---- Canonical tag routing (must match profiles.expert_tags in Supabase) ----
+   The UI shows localized tag labels (RU/UZ), but experts store CANONICAL tags.
+   Every tag is index-aligned across I18N.ru.tags / I18N.uz.tags / CANON_TAGS. */
+const CANON_TAGS = [
+  "IT_va_Raqamlashtirish","Organizatsiya_sogliqni_saqlash","Farmakologiya",
+  "Pediatriya","Jarrohlik_amaliyoti","Medtexnika","Suniy_intellekt",
+  "Sanitariya_Epidemiologiya","Tibbiyot_talimi","Laborator_diagnostika",
+  "Med_huquq","Moliya_va_Iqtisodiyot"
+];
+// Build "any spelling -> canonical" lookup from every language array + canonical itself.
+const _TAG2CANON = (() => {
+  const m = {};
+  const add = (arr) => (arr||[]).forEach((t,i) => { if (t) m[String(t).trim().toLowerCase()] = CANON_TAGS[i]; });
+  add(CANON_TAGS); add(I18N.ru.tags); add(I18N.uz.tags);
+  return m;
+})();
+function toCanon(tag) {
+  if (!tag) return tag;
+  return _TAG2CANON[String(tag).trim().toLowerCase()] || tag;
+}
+// Canonical -> localized label for the current language; falls back gracefully.
+function tagLabel(tag) {
+  const c = toCanon(tag);
+  const i = CANON_TAGS.indexOf(c);
+  return i >= 0 ? L().tags[i] : tag;
+}
 function setLang(l) {
   LANG = l;
   document.getElementById('btn-ru')?.classList.toggle('on', l === 'ru');
@@ -725,7 +752,8 @@ async function doLogin() {
       await ensureExpertRole(data.id); CU.role = 'expert';
     }
     checkUnreadNotifs(); subscribeNotifications();
-    go(isExpertLaunch ? 'review' : 'feed');
+    const isExpert = data.role === 'expert' || data.role === 'admin';
+    go((isExpertLaunch || isExpert) ? 'review' : 'feed');
   } catch(e) {
     showLoginErr('Ошибка: ' + e.message);
   } finally {
@@ -760,7 +788,8 @@ async function initApp() {
           CU.role = 'expert';
         }
         checkUnreadNotifs(); subscribeNotifications();
-        go(isExpertLaunch ? 'review' : 'feed');
+        const isExpert = data.role === 'expert' || data.role === 'admin';
+        go((isExpertLaunch || isExpert) ? 'review' : 'feed');
         return;
       }
     }
@@ -861,7 +890,7 @@ async function doRegister() {
       pnfl: pnfl || null,
       occupation: regOcc,
       workplace: workplace || null,
-      expert_tags: regTags.map(i => L().tags[i]),
+      expert_tags: regTags.map(i => CANON_TAGS[i]),
       league: 'novice',
       season_xp: 0,
       global_xp: 0,
@@ -972,7 +1001,7 @@ async function loadFeed() {
       .select('*, profiles!projects_user_id_fkey(full_name,league,season_xp)')
       .in('status',['approved','pilot','scale','under_review','rejected'])
       .limit(30);
-    if (feedTag !== null) q = q.contains('tags', [L().tags[feedTag]]);
+    if (feedTag !== null) q = q.overlaps('tags', [CANON_TAGS[feedTag], I18N.ru.tags[feedTag], I18N.uz.tags[feedTag]]);
     q = feedSort === 'popular' ? q.order('likes_count',{ascending:false}) : q.order('created_at',{ascending:false});
     const { data, error } = await q;
     if (error) throw error;
@@ -1003,7 +1032,7 @@ function projCard(p) {
   const lg = author.league || 'novice';
   const badge = L().league_badges[lg] || '🌱';
   const lgName = L().leagues[lg] || '';
-  const tags = (p.tags||[]).slice(0,3).map(t=>`<span class="proj-tag">${esc(t)}</span>`).join('');
+  const tags = (p.tags||[]).slice(0,3).map(t=>`<span class="proj-tag">${esc(tagLabel(t))}</span>`).join('');
   const status = p.status||'draft';
   const sLabel = L().statuses[status]||status;
   const forumBanner = status === 'rejected'
@@ -1053,7 +1082,7 @@ async function openProject(id) {
     const sLabel = L().statuses[p.status]||p.status;
     const { data: liked } = CU ? await sb.from('likes').select('id').eq('project_id',id).eq('user_id',CU.id).maybeSingle() : { data: null };
     const isLiked = !!liked;
-    const tags = (p.tags||[]).map(t=>`<span class="proj-tag" style="font-size:12px;padding:4px 10px">${esc(t)}</span>`).join('');
+    const tags = (p.tags||[]).map(t=>`<span class="proj-tag" style="font-size:12px;padding:4px 10px">${esc(tagLabel(t))}</span>`).join('');
     const kpis = (p.kpis||[]).filter(k=>k.trim()).map(k=>`<li style="margin-bottom:6px">${esc(k)}</li>`).join('');
     const aud = (p.audience||[]).join(', ');
     body.innerHTML = `
@@ -1373,7 +1402,7 @@ async function saveProject() {
   $('submit-btn').disabled = true;
   if (!sbOk() || !CU) { toast('Настройте Supabase и войдите в аккаунт'); $('submit-spin').classList.add('hidden'); $('submit-btn-txt').textContent = 'Отправить на экспертизу'; $('submit-btn').disabled=false; return; }
   try {
-    const projectTags = SF.tags.map(i=>L().tags[i]);
+    const projectTags = SF.tags.map(i=>CANON_TAGS[i]);
     const { data: proj, error } = await sb.from('projects').insert({
       user_id: CU.id,
       title: SF.name,
@@ -1397,11 +1426,20 @@ async function saveProject() {
     if (proj?.id) {
       try {
         const { data: experts } = await sb.from('profiles')
-          .select('id,expert_tags').eq('role','expert').eq('status','active').limit(30);
-        const matched = (experts||[]).filter(e=>e.expert_tags?.some(t=>projectTags.includes(t))).slice(0,3);
-        const toAssign = matched.length > 0 ? matched : (experts||[]).slice(0,3);
+          .select('id,expert_tags').eq('role','expert').eq('status','active').limit(200);
+        const wanted = projectTags.map(toCanon);
+        // rank by how many of the project's tags each expert covers, then by load
+        const scored = (experts||[])
+          .map(e => ({ e, overlap: (e.expert_tags||[]).map(toCanon).filter(t=>wanted.includes(t)).length }))
+          .filter(x => x.overlap > 0)
+          .sort((a,b) => b.overlap - a.overlap);
+        const toAssign = scored.slice(0,3).map(x => x.e);
         if (toAssign.length > 0) {
           await sb.from('reviews').insert(toAssign.map(e=>({project_id:proj.id, expert_id:e.id})));
+          // notify each assigned expert
+          for (const e of toAssign) {
+            try { await sb.from('notifications').insert({user_id:e.id, type:'review_assigned', title:'Новый проект на экспертизу', body:'Поступил проект по вашему направлению.', project_id:proj.id, is_read:false}); } catch(_) {}
+          }
         }
       } catch(e) { console.warn('Review assign error:', e.message); }
     }
@@ -1592,6 +1630,7 @@ async function loadReviews() {
     body.innerHTML = reviews.map(r=>`
       <div class="card-simple" style="margin-bottom:12px">
         <div class="fw7" style="margin-bottom:6px">${esc(r.projects?.title||'—')}</div>
+        <div class="proj-tags" style="margin-bottom:8px">${(r.projects?.tags||[]).map(t=>`<span class="proj-tag">${esc(tagLabel(t))}</span>`).join('')}</div>
         <p style="font-size:13px;color:var(--text2);margin-bottom:12px">${esc(r.projects?.pitch||'')}</p>
         <div class="section-h" style="margin-top:0">Ваша рецензия (мин. 150 слов)</div>
         <textarea class="input" id="rv-text-${r.id}" style="min-height:140px" placeholder="Детальный анализ проекта…"></textarea>
