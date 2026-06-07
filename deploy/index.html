@@ -537,6 +537,7 @@ async function linkTelegram(profile) {
 // Daily login streak (TZ): consecutive days -> +XP. Counts once per calendar day.
 async function applyStreak(profile) {
   if (!profile || !sbOk()) return;
+  if (profile.role === 'admin') return;  // admin is a silent observer — no XP/streak
   const today = new Date().toISOString().slice(0, 10);
   const last = profile.last_active_date ? String(profile.last_active_date).slice(0, 10) : null;
   if (last === today) return;  // already counted today
@@ -1553,7 +1554,7 @@ async function loadLeaderboard(type='season') {
   if (!sbOk()) { $('lb-list').innerHTML = demoLeaderboard(); return; }
   try {
     const col = type==='season'?'season_xp':'global_xp';
-    const { data } = await sb.from('profiles').select('id,full_name,league,season_xp,global_xp').order(col,{ascending:false}).limit(50);
+    const { data } = await sb.from('profiles').select('id,full_name,league,season_xp,global_xp').neq('role','admin').order(col,{ascending:false}).limit(50);
     if (!data?.length) { $('lb-list').innerHTML = '<div class="empty"><div class="empty-ic">🏆</div><div class="empty-title">Пока нет участников</div></div>'; return; }
     renderPodium(data.slice(0,3), type);
     renderRankList(data, type);
@@ -1683,6 +1684,7 @@ async function loadXpHistory() {
 /* ===== XP ENGINE ===== */
 async function awardXP(amount, reason, icon='⭐') {
   if (!CU || !sbOk()) return;
+  if (CU.role === 'admin') return;  // admin earns no XP (silent observer)
   try {
     await sb.from('xp_transactions').insert({user_id:CU.id,amount,reason,icon});
     const newSeason = (CU.season_xp||0) + amount;
@@ -1831,7 +1833,7 @@ async function loadAdmin(tab='users') {
     if (tab === 'stats') {
       await renderAdminStats(body);
     } else if (tab === 'users') {
-      const { data } = await sb.from('profiles').select('*').order('created_at',{ascending:false});
+      const { data } = await sb.from('profiles').select('*').neq('role','admin').order('created_at',{ascending:false});
       body.innerHTML = (data||[]).map(u=>`
         <div class="admin-row">
           <div class="ava ava-sm">${initials(u.full_name)}</div>
@@ -1862,7 +1864,7 @@ async function renderAdminStats(body) {
     sb.from('profiles').select('id,username,full_name,expert_tags,season_xp,status').eq('role','expert'),
     sb.from('reviews').select('id,expert_id,decision,reviewed_at,created_at,sla_deadline'),
     sb.from('projects').select('id,status,created_at,tags'),
-    sb.from('profiles').select('id', { count: 'exact', head: true }),
+    sb.from('profiles').select('id', { count: 'exact', head: true }).neq('role','admin'),
   ]);
   const E = er.data||[], R = rv.data||[], P = pr.data||[], users = uc.count||0;
   const days = (a,b) => (new Date(a) - new Date(b)) / 86400000;
