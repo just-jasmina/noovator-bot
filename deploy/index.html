@@ -533,6 +533,21 @@ async function linkTelegram(profile) {
   try { await sb.from('profiles').update({ telegram_id: tid }).eq('id', profile.id); profile.telegram_id = tid; } catch(_) {}
 }
 
+// Daily login streak (TZ): consecutive days -> +XP. Counts once per calendar day.
+async function applyStreak(profile) {
+  if (!profile || !sbOk()) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const last = profile.last_active_date ? String(profile.last_active_date).slice(0, 10) : null;
+  if (last === today) return;  // already counted today
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const streak = (last === yesterday) ? (profile.streak_days || 0) + 1 : 1;
+  try {
+    await sb.from('profiles').update({ streak_days: streak, last_active_date: today }).eq('id', profile.id);
+    profile.streak_days = streak; profile.last_active_date = today;
+    await awardXP(xpFor('daily_streak', 5), `🔥 ${streak} kun ketma-ket / подряд`, '🔥');
+  } catch(_) {}
+}
+
 /* ===== I18N ===== */
 const I18N = {
   ru: {
@@ -606,6 +621,30 @@ function tagLabel(tag) {
   const c = toCanon(tag);
   const i = CANON_TAGS.indexOf(c);
   return i >= 0 ? L().tags[i] : tag;
+}
+
+// Admin-editable XP values (xp_rules table). Loaded once at startup; falls back to defaults.
+let XP_RULES = {};
+async function loadXpRules() {
+  try {
+    const { data } = await sb.from('xp_rules').select('action,xp_amount,is_active');
+    (data||[]).forEach(r => { if (r.is_active !== false) XP_RULES[r.action] = r.xp_amount; });
+  } catch(_) {}
+}
+function xpFor(action, fallback) {
+  return (XP_RULES[action] != null) ? XP_RULES[action] : fallback;
+}
+
+// SLA badge for an expert review. Deadline = sla_deadline, or created_at + 7 days.
+function slaBadge(deadline, createdAt) {
+  let dl = deadline ? new Date(deadline) : (createdAt ? new Date(new Date(createdAt).getTime() + 7*86400000) : null);
+  if (!dl || isNaN(dl)) return '';
+  const days = Math.ceil((dl - Date.now()) / 86400000);
+  let bg, fg, txt;
+  if (days < 0)      { bg='#fee2e2'; fg='#b91c1c'; txt=`⚠️ ${Math.abs(days)} kun kechikdi`; }
+  else if (days <= 2){ bg='#fff7e6'; fg='#b45309'; txt=`⏰ ${days} kun qoldi`; }
+  else               { bg='#eef2ff'; fg='#4338ca'; txt=`🕐 ${days} kun`; }
+  return `<span style="background:${bg};color:${fg};font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px;white-space:nowrap">${txt}</span>`;
 }
 function setLang(l) {
   LANG = l;
@@ -699,7 +738,22 @@ function go(screen, opts={}) {
 }
 
 /* ===== AUTH ===== */
-const isExpertLaunch = tg?.initDataUnsafe?.start_param === 'expert';
+// Deep-link target: from Telegram start_param OR the URL query (?startapp= / ?tgWebAppStartParam=).
+function deepLinkParam() {
+  let sp = '';
+  try { sp = tg?.initDataUnsafe?.start_param || ''; } catch(_) {}
+  if (!sp) { try { const q = new URLSearchParams(location.search); sp = q.get('startapp') || q.get('tgWebAppStartParam') || ''; } catch(_) {} }
+  return sp;
+}
+const DEEPLINK = deepLinkParam();
+const isExpertLaunch = DEEPLINK === 'expert';
+// After auth, open a project if the deep-link points to one (project_<uuid>).
+function handleDeepLink() {
+  if (DEEPLINK && DEEPLINK.startsWith('project_')) {
+    const pid = DEEPLINK.slice('project_'.length);
+    if (pid) { try { openProject(pid); } catch(_) {} }
+  }
+}
 
 /* ===== PASSWORD HELPERS ===== */
 async function hashPassword(pw) {
@@ -752,18 +806,21 @@ async function doLogin() {
   $('li-btn-txt').textContent = 'Вход…';
   try {
     const hash = await hashPassword(password);
-    const { data, error } = await sb.from('profiles').select('*').eq('username', username).single();
-    if (error || !data) { showLoginErr('Пользователь не найден'); return; }
-    if (data.password_hash !== hash) { showLoginErr('Неверный пароль'); return; }
+    // Password is verified server-side (RPC) so the hash never leaves the database.
+    const { data, error } = await sb.rpc('app_login', { p_username: username, p_hash: hash });
+    if (error) { showLoginErr('Ошибка входа, попробуйте ещё раз'); return; }
+    if (!data) { showLoginErr('Неверный логин или пароль'); return; }
     CU = data;
     localStorage.setItem('tn_profile_id', data.id);
     await linkTelegram(CU);
+    await applyStreak(CU);
     if (isExpertLaunch && data.role !== 'expert' && data.role !== 'admin') {
       await ensureExpertRole(data.id); CU.role = 'expert';
     }
     checkUnreadNotifs(); subscribeNotifications();
     const isExpert = data.role === 'expert' || data.role === 'admin';
     go((isExpertLaunch || isExpert) ? 'review' : 'feed');
+    handleDeepLink();
   } catch(e) {
     showLoginErr('Ошибка: ' + e.message);
   } finally {
@@ -786,6 +843,7 @@ async function ensureExpertRole(profileId) {
 
 async function initApp() {
   if (!sbOk()) { showSetupError(); return; }
+  loadXpRules();
   try {
     // Auto-login from localStorage session (previously logged in)
     const localId = localStorage.getItem('tn_profile_id');
@@ -794,6 +852,7 @@ async function initApp() {
       if (data) {
         CU = data;
         await linkTelegram(CU);
+        await applyStreak(CU);
         if (isExpertLaunch && data.role !== 'expert' && data.role !== 'admin') {
           await ensureExpertRole(data.id);
           CU.role = 'expert';
@@ -912,7 +971,7 @@ async function doRegister() {
     if (error) throw error;
     CU = profile;
     localStorage.setItem('tn_profile_id', profile.id);
-    await awardXP(50, L().xp_reg, '✅');
+    await awardXP(xpFor('profile_register', 50), L().xp_reg, '✅');
     haptic('success');
     checkUnreadNotifs(); subscribeNotifications();
     go(isExpertLaunch ? 'review' : 'feed');
@@ -1268,7 +1327,7 @@ async function addComment(projId) {
     try { await sb.rpc('increment_comments',{proj_id:projId}); } catch(e) {}
     inp.value = '';
     if (text.length >= 50) {
-      await awardXP(5, L().xp_comment, '💬');
+      await awardXP(xpFor('comment', 5), L().xp_comment, '💬');
       toast('Комментарий добавлен! +5 XP 🎉');
     } else { toast('Комментарий добавлен!'); }
     loadComments(projId);
@@ -1449,7 +1508,8 @@ async function saveProject() {
           .sort((a,b) => b.overlap - a.overlap);
         const toAssign = scored.slice(0,3).map(x => x.e);
         if (toAssign.length > 0) {
-          await sb.from('reviews').insert(toAssign.map(e=>({project_id:proj.id, expert_id:e.id})));
+          const sla = new Date(Date.now() + 7*86400000).toISOString();  // SLA: 7 kun
+          await sb.from('reviews').insert(toAssign.map(e=>({project_id:proj.id, expert_id:e.id, sla_deadline:sla})));
           // notify each assigned expert
           for (const e of toAssign) {
             try { await sb.from('notifications').insert({user_id:e.id, type:'review_assigned', title:'Новый проект на экспертизу', body:'Поступил проект по вашему направлению.', project_id:proj.id, is_read:false}); } catch(_) {}
@@ -1458,7 +1518,7 @@ async function saveProject() {
       } catch(e) { console.warn('Review assign error:', e.message); }
     }
 
-    await awardXP(50, L().xp_submit, '📤');
+    await awardXP(xpFor('project_submit', 50), L().xp_submit, '📤');
     haptic('success');
     $('submit-body').innerHTML = `
       <div class="success-wrap">
@@ -1639,22 +1699,39 @@ async function loadReviews() {
   }
   body.innerHTML = '<div class="spinner"></div>';
   try {
-    const { data: reviews } = await sb.from('reviews').select('*, projects!reviews_project_id_fkey(id,title,tags,pitch,status)').eq('expert_id',CU.id).is('decision',null).limit(20);
-    if (!reviews?.length) { body.innerHTML = '<div class="empty"><div class="empty-ic">✅</div><div class="empty-title">Нет проектов на рецензии</div></div>'; return; }
-    body.innerHTML = reviews.map(r=>`
-      <div class="card-simple" style="margin-bottom:12px">
-        <div class="fw7" style="margin-bottom:6px">${esc(r.projects?.title||'—')}</div>
-        <div class="proj-tags" style="margin-bottom:8px">${(r.projects?.tags||[]).map(t=>`<span class="proj-tag">${esc(tagLabel(t))}</span>`).join('')}</div>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">${esc(r.projects?.pitch||'')}</p>
-        <div class="section-h" style="margin-top:0">Ваша рецензия (мин. 150 слов)</div>
-        <textarea class="input" id="rv-text-${r.id}" style="min-height:140px" placeholder="Детальный анализ проекта…"></textarea>
+    const { data: reviews } = await sb.from('reviews')
+      .select('id, sla_deadline, created_at, projects!reviews_project_id_fkey(id,title,tags,pitch,problem,solution,audience,kpis,effect,cost_range,budget_use,timeline,status)')
+      .eq('expert_id',CU.id).is('decision',null).order('created_at',{ascending:true}).limit(20);
+    if (!reviews?.length) { body.innerHTML = '<div class="empty"><div class="empty-ic">✅</div><div class="empty-title">Barcha loyihalar ko\'rib chiqildi!</div><p class="text-hint text-sm">Yangi loyiha kelganda shu yerda ko\'rinadi</p></div>'; return; }
+    const sec = (label, val) => val && String(val).trim() ? `<div style="margin-top:12px"><div style="font-size:12px;font-weight:700;color:var(--hint);margin-bottom:4px">${label}</div><p style="font-size:14px;line-height:1.55">${esc(val)}</p></div>` : '';
+    body.innerHTML = `<div style="font-size:13px;color:var(--hint);margin-bottom:14px">🕵️ Blind Review — muallif anonim · ${reviews.length} ta loyiha</div>` + reviews.map(r=>{
+      const p = r.projects || {};
+      const kpis = (p.kpis||[]).filter(k=>String(k).trim()).map(k=>`<li>${esc(k)}</li>`).join('');
+      const aud = (p.audience||[]).join(', ');
+      return `
+      <div class="card-simple" style="margin-bottom:16px">
+        <div class="flex items-center gap8" style="margin-bottom:8px;justify-content:space-between">
+          <div class="fw7" style="font-size:16px">${esc(p.title||'—')}</div>
+          ${slaBadge(r.sla_deadline, r.created_at)}
+        </div>
+        <div class="proj-tags" style="margin-bottom:10px">${(p.tags||[]).map(t=>`<span class="proj-tag">${esc(tagLabel(t))}</span>`).join('')}</div>
+        ${sec('КРАТКО', p.pitch)}
+        ${sec('ПРОБЛЕМА', p.problem)}
+        ${sec('РЕШЕНИЕ', p.solution)}
+        ${aud ? sec('АУДИТОРИЯ', aud) : ''}
+        ${kpis ? `<div style="margin-top:12px"><div style="font-size:12px;font-weight:700;color:var(--hint);margin-bottom:4px">KPI</div><ul style="padding-left:18px;font-size:14px;line-height:1.55;margin:0">${kpis}</ul></div>` : ''}
+        ${sec('ОЖИДАЕМЫЙ ЭФФЕКТ', p.effect)}
+        <div style="margin-top:12px"><div style="font-size:12px;font-weight:700;color:var(--hint);margin-bottom:4px">РЕСУРСЫ</div><p style="font-size:14px;line-height:1.5">${esc(p.cost_range||'—')} • ${esc(p.timeline||'—')}${p.budget_use ? '<br>'+esc(p.budget_use) : ''}</p></div>
+
+        <div class="section-h">Sizning retsenziyangiz / Ваша рецензия (мин. 150 слов)</div>
+        <textarea class="input" id="rv-text-${r.id}" style="min-height:140px" placeholder="Loyihaning batafsil tahlili / Детальный анализ…"></textarea>
         <div class="word-cnt" id="rv-wc-${r.id}">0/150</div>
         <div style="display:flex;gap:8px;margin-top:12px">
-          <button class="btn sm success" style="flex:1" onclick="submitReview('${esc(r.id)}','approve')">✓ Одобрить</button>
-          <button class="btn sm" style="flex:1;background:var(--gold)" onclick="submitReview('${esc(r.id)}','revision')">↩ Доработка</button>
-          <button class="btn sm danger-btn" style="flex:1" onclick="submitReview('${esc(r.id)}','reject')">✗ Отклонить</button>
+          <button class="btn sm success" style="flex:1" onclick="submitReview('${esc(r.id)}','approve')">✓ Tasdiqlash</button>
+          <button class="btn sm" style="flex:1;background:var(--gold)" onclick="submitReview('${esc(r.id)}','revision')">↩ Qayta ishlash</button>
+          <button class="btn sm danger-btn" style="flex:1" onclick="submitReview('${esc(r.id)}','reject')">✗ Rad etish</button>
         </div>
-      </div>`).join('');
+      </div>`;}).join('');
     reviews.forEach(r => {
       const ta = document.getElementById('rv-text-'+r.id);
       const wc_el = document.getElementById('rv-wc-'+r.id);
@@ -1676,7 +1753,7 @@ async function submitReview(reviewId, decision) {
       .single();
     if (error) throw error;
 
-    await awardXP(20, 'Рецензия проекта', '🔍');
+    await awardXP(xpFor('expert_review', 20), 'Рецензия проекта / Retsenziya', '🔍');
     haptic('success');
 
     // Check all votes for this project and decide
@@ -1752,7 +1829,7 @@ async function loadAdmin(tab='users') {
           <div class="ava ava-sm">${initials(u.full_name)}</div>
           <div style="flex:1;min-width:0">
             <div class="fw7 text-sm">${esc(u.full_name)}</div>
-            <div class="text-hint" style="font-size:11px">${esc(u.phone||'')} • ${esc(u.pnfl||'—')} • ${L().leagues[u.league]}</div>
+            <div class="text-hint" style="font-size:11px">${esc(u.phone||'')} • ${L().leagues[u.league]}</div>
             <div class="text-hint" style="font-size:11px">${fmt(u.season_xp)} XP сезон</div>
           </div>
           <div style="display:flex;flex-direction:column;gap:4px">
