@@ -1,7 +1,6 @@
-from aiogram import Router, F
+from aiogram import Router
 from aiogram.types import Message
 from aiogram.filters import CommandStart, Command
-from aiogram.types import MenuButtonWebApp, WebAppInfo
 from ..keyboards import main_webapp_button, expert_webapp_button
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -9,95 +8,84 @@ from backend.config import settings
 
 router = Router()
 
-WELCOME_TEXT = """
+
+def _welcome_text(name: str) -> str:
+    hi = f"👋 Assalomu alaykum, <b>{name}</b>!" if name else "👋 Assalomu alaykum!"
+    return f"""{hi}
+
 🏥 <b>Tibbiyot Novatorlari</b>
+<i>Sog'liqni saqlash innovatsiyalari platformasi</i>
 
-Sog'liqni saqlash sohasidagi innovatsiyalar platformasiga xush kelibsiz!
+Bu yerda siz:
+💡 Innovatsion g'oyangizni yuborasiz
+🔬 3 ta ekspert uni anonim baholaydi <i>(Blind Review)</i>
+🏆 XP yig'ib, 4 liga bo'ylab yuqoriga ko'tarilasiz
+🤝 Mentor va Inkubatordan foydalanasiz
 
-<b>Platforma imkoniyatlari:</b>
-• 💡 Innovatsion g'oyalarni yuborish
-• 🔬 Ekspert baholash (Blind Review)
-• 🤝 Mentorlik va Inkubator
-• 🏆 Reyting va XP tizimi
-• 📊 4 ta liga: Yangi boshlovchi → Novator
+━━━━━━━━━━━━━━━
 
----
+🇷🇺 <b>Платформа медицинских инноваций</b>
+💡 Подайте идею → 🔬 оценка 3 экспертов → 🏆 рост по лигам и кадровый резерв Минздрава
 
-🏥 <b>Тиббиёт Новаторлари</b>
+⬇️ <b>Boshlash uchun tugmani bosing / Нажмите кнопку ниже</b>"""
 
-Добро пожаловать на платформу инноваций в здравоохранении!
 
-<b>Возможности:</b>
-• 💡 Подача инновационных идей
-• 🔬 Экспертная оценка (Blind Review)
-• 🤝 Менторство и Инкубатор
-• 🏆 Рейтинг и XP-система
-• 📊 4 лиги: Новичок → Новатор
-"""
+EXPERT_WELCOME_TEXT = """🔬 <b>Tibbiyot Novatorlari — Ekspert kabineti</b>
 
-EXPERT_WELCOME_TEXT = """
-🔬 <b>Tibbiyot Novatorlari — Ekspert kabineti</b>
+Xush kelibsiz! Loyihalar teglaringiz bo'yicha avtomatik tushadi.
 
-Siz ekspert sifatida tizimga kirmoqdasiz.
+📋 Har bir loyihani ko'rib chiqing
+✅ Tasdiqlash · ↩️ Qayta ishlash · ✗ Rad etish
+✍️ Har bir qaror — kamida 150 so'zlik retsenziya
+🏅 Har bir retsenziya uchun <b>+20 XP</b>
+⏰ SLA: 7 kun
 
-<b>Ekspert vazifalari:</b>
-• 📋 Loyihalarni ko'rib chiqish va baholash
-• ✅ Tasdiqlaш / ↩ Qayta ishlash / ✗ Rad etish
-• 🏅 Har bir retsenziya uchun +20 XP
+━━━━━━━━━━━━━━━
 
----
-
-🔬 <b>Тиббиёт Новаторлари — Экспертный кабинет</b>
-
-Вы входите в систему как эксперт.
-
-<b>Ваши задачи:</b>
-• 📋 Рецензировать поданные проекты
-• ✅ Одобрить / ↩ На доработку / ✗ Отклонить
-• 🏅 За каждую рецензию +20 XP
-"""
+🇷🇺 <b>Экспертный кабинет.</b> Проекты приходят автоматически по вашим тегам. Решение — с рецензией ≥150 слов. За рецензию +20 XP, срок 7 дней."""
 
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
-    user_id = message.from_user.id
-    if user_id in settings.expert_ids_set:
-        await message.answer(
-            EXPERT_WELCOME_TEXT,
-            parse_mode="HTML",
-            reply_markup=expert_webapp_button(),
-        )
+    name = (message.from_user.first_name or "").strip()
+    if message.from_user.id in settings.expert_ids_set:
+        await message.answer(EXPERT_WELCOME_TEXT, reply_markup=expert_webapp_button())
     else:
         await message.answer(
-            WELCOME_TEXT,
-            parse_mode="HTML",
+            _welcome_text(name),
             reply_markup=main_webapp_button("🚀 Platformani ochish / Открыть платформу"),
         )
 
 
 @router.message(Command("help"))
 async def cmd_help(message: Message):
-    text = (
-        "ℹ️ <b>Yordam / Помощь</b>\n\n"
-        "/start — Platformani qayta ochish\n"
-        "/profile — Profilingiz\n"
-        "/projects — Loyihalaringiz\n\n"
-        "Muammolar uchun: @support_tibbiyot"
-    )
-    await message.answer(text, parse_mode="HTML", reply_markup=main_webapp_button())
+    text = """ℹ️ <b>Yordam / Помощь</b>
+
+<b>Buyruqlar / Команды:</b>
+🚀 /start — Platformani ochish / Открыть платформу
+👤 /profile — Profil, XP va liga / Профиль, XP и лига
+📁 /projects — Loyihalarim / Мои проекты
+ℹ️ /help — Yordam / Помощь
+
+❓ Savollar bo'lsa / По вопросам: @support_tibbiyot"""
+    await message.answer(text, reply_markup=main_webapp_button())
 
 
 @router.message(Command("profile"))
 async def cmd_profile(message: Message):
     await message.answer(
-        "👤 Profilingizni ko'rish uchun ilovani oching:",
-        reply_markup=main_webapp_button("👤 Profilni ko'rish"),
+        "👤 <b>Profilingiz / Ваш профиль</b>\n\n"
+        "XP, liga, streak va yutuqlaringizni ilovada ko'ring.\n"
+        "<i>Откройте приложение, чтобы увидеть XP, лигу и достижения.</i>",
+        reply_markup=main_webapp_button("👤 Profilni ochish / Открыть профиль"),
     )
 
 
 @router.message(Command("projects"))
 async def cmd_projects(message: Message):
     await message.answer(
-        "📁 Loyihalaringizni ko'rish uchun ilovani oching:",
-        reply_markup=main_webapp_button("📁 Loyihalarim"),
+        "📁 <b>Loyihalaringiz / Ваши проекты</b>\n\n"
+        "Yuborgan loyihalaringiz holatini kuzating.\n"
+        "<i>Следите за статусом поданных проектов в приложении.</i>",
+        reply_markup=main_webapp_button("📁 Loyihalarim / Мои проекты"),
     )

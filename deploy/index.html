@@ -524,6 +524,15 @@ try { sb = createClient(SUPA_URL, SUPA_KEY); } catch(e) { sb = null; }
 const tg = window.Telegram?.WebApp || null;
 if (tg) { try { tg.ready(); tg.expand(); } catch(e) {} }
 
+// Telegram user id (only when launched inside Telegram) — used so the bot can push notifications.
+function tgUserId() { try { return tg?.initDataUnsafe?.user?.id || null; } catch(_) { return null; } }
+// Back-fill telegram_id on an existing profile the first time they open the app inside Telegram.
+async function linkTelegram(profile) {
+  const tid = tgUserId();
+  if (!tid || !profile || profile.telegram_id) return;
+  try { await sb.from('profiles').update({ telegram_id: tid }).eq('id', profile.id); profile.telegram_id = tid; } catch(_) {}
+}
+
 /* ===== I18N ===== */
 const I18N = {
   ru: {
@@ -748,6 +757,7 @@ async function doLogin() {
     if (data.password_hash !== hash) { showLoginErr('Неверный пароль'); return; }
     CU = data;
     localStorage.setItem('tn_profile_id', data.id);
+    await linkTelegram(CU);
     if (isExpertLaunch && data.role !== 'expert' && data.role !== 'admin') {
       await ensureExpertRole(data.id); CU.role = 'expert';
     }
@@ -783,6 +793,7 @@ async function initApp() {
       const { data } = await sb.from('profiles').select('*').eq('id', localId).single();
       if (data) {
         CU = data;
+        await linkTelegram(CU);
         if (isExpertLaunch && data.role !== 'expert' && data.role !== 'admin') {
           await ensureExpertRole(data.id);
           CU.role = 'expert';
@@ -891,6 +902,7 @@ async function doRegister() {
       occupation: regOcc,
       workplace: workplace || null,
       expert_tags: regTags.map(i => CANON_TAGS[i]),
+      telegram_id: tgUserId(),
       league: 'novice',
       season_xp: 0,
       global_xp: 0,

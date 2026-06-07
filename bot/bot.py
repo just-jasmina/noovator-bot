@@ -37,7 +37,13 @@ async def run_bot():
     dp.include_router(start.router)
 
     await set_bot_commands(bot)
-    await dp.start_polling(bot, allowed_updates=["message", "callback_query"])
+
+    # Run Telegram polling and the push-notification pusher side by side.
+    from .notifier import run_notifier
+    await asyncio.gather(
+        dp.start_polling(bot, allowed_updates=["message", "callback_query"]),
+        run_notifier(bot),
+    )
 
 
 if __name__ == "__main__":

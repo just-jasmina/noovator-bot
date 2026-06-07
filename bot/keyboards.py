@@ -36,3 +36,10 @@ def open_review_button(project_id: int) -> InlineKeyboardMarkup:
             web_app=WebAppInfo(url=url),
         )
     ]])
+
+
+def notify_keyboard(ntype: str, project_id=None) -> InlineKeyboardMarkup:
+    """Pick the right 'open' button for a push notification by its type."""
+    if ntype == "review_assigned":
+        return expert_webapp_button("📋 Ekspertizaga o'tish / Перейти к экспертизе")
+    return main_webapp_button("🔍 Ilovani ochish / Открыть приложение")
