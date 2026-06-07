@@ -488,7 +488,8 @@ textarea.input{resize:vertical;min-height:96px}
   </div>
   <div style="padding:12px var(--pad) 0">
     <div class="tabs">
-      <button class="tab on" id="adm-users-tab" onclick="showAdminTab('users')">Пользователи</button>
+      <button class="tab on" id="adm-stats-tab" onclick="showAdminTab('stats')">📊 Статистика</button>
+      <button class="tab" id="adm-users-tab" onclick="showAdminTab('users')">Пользователи</button>
       <button class="tab" id="adm-projs-tab" onclick="showAdminTab('projects')">Проекты</button>
     </div>
   </div>
@@ -731,7 +732,7 @@ function go(screen, opts={}) {
   if (screen === 'profile') loadProfile();
   if (screen === 'submit') initSubmit();
   if (screen === 'review') loadReviews();
-  if (screen === 'admin') loadAdmin('users');
+  if (screen === 'admin') loadAdmin('stats');
   if (screen === 'notif') loadNotifications();
   if (screen === 'project' && opts.id) openProject(opts.id);
   window.scrollTo({top:0});
@@ -1806,9 +1807,10 @@ async function submitReview(reviewId, decision) {
 }
 
 /* ===== ADMIN ===== */
-let adminTab = 'users';
+let adminTab = 'stats';
 function showAdminTab(tab) {
   adminTab = tab;
+  $('adm-stats-tab')?.classList.toggle('on', tab==='stats');
   $('adm-users-tab')?.classList.toggle('on', tab==='users');
   $('adm-projs-tab')?.classList.toggle('on', tab==='projects');
   loadAdmin(tab);
@@ -1822,7 +1824,9 @@ async function loadAdmin(tab='users') {
   }
   body.innerHTML = '<div class="spinner"></div>';
   try {
-    if (tab === 'users') {
+    if (tab === 'stats') {
+      await renderAdminStats(body);
+    } else if (tab === 'users') {
       const { data } = await sb.from('profiles').select('*').order('created_at',{ascending:false});
       body.innerHTML = (data||[]).map(u=>`
         <div class="admin-row">
@@ -1854,6 +1858,136 @@ async function loadAdmin(tab='users') {
         </div>`).join('');
     }
   } catch(e) { body.innerHTML = `<p style="color:var(--danger);padding:16px">${esc(e.message)}</p>`; }
+}
+
+async function renderAdminStats(body) {
+  const now = Date.now();
+  const [er, rv, pr, uc] = await Promise.all([
+    sb.from('profiles').select('id,username,full_name,expert_tags,season_xp,status').eq('role','expert'),
+    sb.from('reviews').select('id,expert_id,decision,reviewed_at,created_at,sla_deadline'),
+    sb.from('projects').select('id,status,created_at,tags'),
+    sb.from('profiles').select('id', { count: 'exact', head: true }),
+  ]);
+  const E = er.data||[], R = rv.data||[], P = pr.data||[], users = uc.count||0;
+  const days = (a,b) => (new Date(a) - new Date(b)) / 86400000;
+
+  // ---- Platform ----
+  const byStatus = {}; P.forEach(p => byStatus[p.status] = (byStatus[p.status]||0)+1);
+  const done = R.filter(r => r.decision);
+  const pend = R.filter(r => !r.decision);
+  const overdue = pend.filter(r => r.sla_deadline && new Date(r.sla_deadline) < now);
+  const appr = done.filter(r => r.decision==='approve').length;
+  const apprRate = done.length ? Math.round(appr/done.length*100) : 0;
+  const weekAgo = now - 7*86400000;
+  const newWeek = P.filter(p => new Date(p.created_at).getTime() > weekAgo).length;
+  const turnAll = done.filter(r => r.reviewed_at && r.created_at).map(r => days(r.reviewed_at, r.created_at));
+  const avgTurn = turnAll.length ? (turnAll.reduce((a,b)=>a+b,0)/turnAll.length) : 0;
+  const slaOkAll = done.filter(r => r.reviewed_at && r.sla_deadline && new Date(r.reviewed_at) <= new Date(r.sla_deadline)).length;
+  const slaRate = done.length ? Math.round(slaOkAll/done.length*100) : 0;
+
+  // ---- Per expert ----
+  const M = {}; E.forEach(e => M[e.id] = { ...e, done:0, pend:0, over:0, appr:0, rej:0, rev:0, turn:[], slaOk:0 });
+  R.forEach(r => { const x = M[r.expert_id]; if (!x) return;
+    if (r.decision) { x.done++;
+      if (r.decision==='approve') x.appr++; else if (r.decision==='reject') x.rej++; else x.rev++;
+      if (r.reviewed_at && r.created_at) x.turn.push(days(r.reviewed_at, r.created_at));
+      if (r.reviewed_at && r.sla_deadline && new Date(r.reviewed_at) <= new Date(r.sla_deadline)) x.slaOk++;
+    } else { x.pend++; if (r.sla_deadline && new Date(r.sla_deadline) < now) x.over++; }
+  });
+  const experts = Object.values(M).sort((a,b) => (b.done - a.done) || (b.pend - a.pend));
+
+  // ---- Per direction (tag) ----
+  const tags = CANON_TAGS.map((c,i) => {
+    const projN = P.filter(p => (p.tags||[]).map(toCanon).includes(c)).length;
+    const expN  = E.filter(e => (e.expert_tags||[]).map(toCanon).includes(c)).length;
+    return { label: L().tags[i], projN, expN, ratio: expN ? projN/expN : (projN ? 99 : 0) };
+  }).sort((a,b) => b.ratio - a.ratio);
+  const maxProj = Math.max(1, ...tags.map(t => t.projN));
+
+  // ---- Render ----
+  const card = (ic,val,lbl,color) => `<div style="flex:1 1 86px;background:var(--card);border:1px solid var(--sep);border-radius:14px;padding:10px 12px"><div style="font-size:18px;line-height:1">${ic}</div><div style="font-size:21px;font-weight:800;margin-top:2px;color:${color||'var(--text)'}">${val}</div><div style="font-size:10px;color:var(--hint);line-height:1.2">${lbl}</div></div>`;
+  const st = (k) => byStatus[k]||0;
+  const pct = (n,d) => d ? Math.round(n/d*100) : 0;
+
+  const expertCards = experts.map(e => {
+    const tot = e.appr+e.rej+e.rev;
+    const ar = tot ? Math.round(e.appr/tot*100) : 0;
+    const at = e.turn.length ? (e.turn.reduce((a,b)=>a+b,0)/e.turn.length) : 0;
+    const sla = e.done ? Math.round(e.slaOk/e.done*100) : 0;
+    const slaColor = sla>=80?'#16a34a':sla>=50?'#b45309':'#b91c1c';
+    return `<div class="card-simple" style="margin-bottom:10px;padding:12px">
+      <div class="flex items-center gap8" style="justify-content:space-between;margin-bottom:8px">
+        <div class="flex items-center gap8" style="min-width:0">
+          <div class="ava ava-sm">${initials(e.full_name)}</div>
+          <div style="min-width:0">
+            <div class="fw7 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.full_name||e.username||'—')}</div>
+            <div class="text-hint" style="font-size:10px">@${esc(e.username||'')} • ${(e.expert_tags||[]).map(tagLabel).join(', ')}</div>
+          </div>
+        </div>
+        ${e.over>0?`<span style="background:#fee2e2;color:#b91c1c;font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;white-space:nowrap">⚠️ ${e.over} проср.</span>`:''}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;font-size:11px">
+        <div><div style="font-size:16px;font-weight:800">${e.done}</div><div class="text-hint" style="font-size:9px">сделано</div></div>
+        <div><div style="font-size:16px;font-weight:800;color:${e.pend?'#b45309':'var(--text)'}">${e.pend}</div><div class="text-hint" style="font-size:9px">в работе</div></div>
+        <div><div style="font-size:16px;font-weight:800">${at?at.toFixed(1):'—'}</div><div class="text-hint" style="font-size:9px">ср. дней</div></div>
+        <div><div style="font-size:16px;font-weight:800;color:${slaColor}">${e.done?sla+'%':'—'}</div><div class="text-hint" style="font-size:9px">в срок</div></div>
+      </div>
+      ${tot?`<div style="display:flex;height:6px;border-radius:4px;overflow:hidden;margin-top:8px">
+        <div style="width:${pct(e.appr,tot)}%;background:#16a34a"></div>
+        <div style="width:${pct(e.rev,tot)}%;background:#d4a017"></div>
+        <div style="width:${pct(e.rej,tot)}%;background:#dc2626"></div></div>
+        <div class="text-hint" style="font-size:9px;margin-top:3px">✅ ${e.appr} · ↩️ ${e.rev} · ✗ ${e.rej} (одобрено ${ar}%)</div>`:''}
+    </div>`;
+  }).join('') || '<p class="text-hint" style="padding:12px">Нет экспертов</p>';
+
+  const tagBars = tags.map(t => {
+    const warn = t.expN===0 || t.ratio>=5;
+    return `<div style="margin-bottom:8px">
+      <div class="flex" style="justify-content:space-between;font-size:12px;margin-bottom:3px">
+        <span>${esc(t.label)} ${warn?'<span style="color:#b91c1c">⚠️</span>':''}</span>
+        <span class="text-hint">${t.projN} проект. / ${t.expN} эксп.</span>
+      </div>
+      <div style="height:7px;background:var(--bg);border-radius:4px;overflow:hidden">
+        <div style="width:${Math.round(t.projN/maxProj*100)}%;height:100%;background:${warn?'#dc2626':'#5469d4'}"></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div style="padding:14px var(--pad)">
+      <div class="section-h" style="margin-top:0">Обзор платформы</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        ${card('📁', P.length, 'Проектов всего')}
+        ${card('🆕', newWeek, 'За 7 дней', '#5469d4')}
+        ${card('👥', users, 'Пользователей')}
+        ${card('🔬', E.length, 'Экспертов')}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+        ${card('🕵️', st('under_review'), 'На экспертизе', '#b45309')}
+        ${card('✅', st('approved')+st('pilot')+st('scale'), 'Одобрено', '#16a34a')}
+        ${card('📢', st('rejected'), 'В ленте/откл.')}
+        ${card('⏰', overdue.length, 'Просрочено SLA', overdue.length?'#b91c1c':'var(--text)')}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+        ${card('📋', pend.length, 'Ревью в очереди')}
+        ${card('✔️', done.length, 'Ревью завершено')}
+        ${card('📈', apprRate+'%', 'Одобрений')}
+        ${card('⚡', avgTurn?avgTurn.toFixed(1):'—', 'Ср. дней реценз.')}
+      </div>
+
+      <div class="section-h">Эффективность экспертов <span class="text-hint" style="font-weight:400;text-transform:none">(KPI)</span></div>
+      ${expertCards}
+
+      <div class="section-h">Загрузка по направлениям <span class="text-hint" style="font-weight:400;text-transform:none">⚠️ = узкое место</span></div>
+      ${tagBars}
+
+      <div class="section-h">SLA-дисциплина</div>
+      <div class="card-simple" style="padding:14px">
+        <div class="flex" style="justify-content:space-between;font-size:13px;margin-bottom:6px"><span>Рецензий в срок</span><span class="fw7">${slaRate}%</span></div>
+        <div style="height:8px;background:var(--bg);border-radius:4px;overflow:hidden"><div style="width:${slaRate}%;height:100%;background:${slaRate>=80?'#16a34a':slaRate>=50?'#d4a017':'#dc2626'}"></div></div>
+        <div class="text-hint" style="font-size:11px;margin-top:8px">⏰ Сейчас просрочено: <b style="color:${overdue.length?'#b91c1c':'inherit'}">${overdue.length}</b> · бот переназначает их резерву автоматически</div>
+      </div>
+    </div>`;
 }
 
 async function setRole(userId, role) {
