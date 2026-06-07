@@ -440,7 +440,7 @@ textarea.input{resize:vertical;min-height:96px}
 <!-- ===== LEADERBOARD ===== -->
 <div id="s-leaderboard" class="screen">
   <div class="topbar">
-    <div class="topbar-title">🏆 Рейтинг</div>
+    <div class="topbar-title" id="lb-title">🏆 Рейтинг</div>
   </div>
   <div style="padding:12px var(--pad) 0">
     <div class="tabs">
@@ -1554,7 +1554,10 @@ async function loadLeaderboard(type='season') {
   if (!sbOk()) { $('lb-list').innerHTML = demoLeaderboard(); return; }
   try {
     const col = type==='season'?'season_xp':'global_xp';
-    const { data } = await sb.from('profiles').select('id,full_name,league,season_xp,global_xp').neq('role','admin').order(col,{ascending:false}).limit(50);
+    // Separate ladders: experts see only the expert ranking, everyone else sees the user ranking.
+    const audience = (CU?.role === 'expert') ? 'expert' : 'user';
+    const t = $('lb-title'); if (t) t.textContent = audience === 'expert' ? '🔬 Рейтинг экспертов' : '🏆 Рейтинг';
+    const { data } = await sb.from('profiles').select('id,full_name,league,season_xp,global_xp,role').eq('role',audience).order(col,{ascending:false}).limit(50);
     if (!data?.length) { $('lb-list').innerHTML = '<div class="empty"><div class="empty-ic">🏆</div><div class="empty-title">Пока нет участников</div></div>'; return; }
     renderPodium(data.slice(0,3), type);
     renderRankList(data, type);
