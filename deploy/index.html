@@ -718,6 +718,13 @@ function setLang(l) {
 /* ===== CONSTANTS ===== */
 const LEAGUE_XP = { novice:0, amateur:500, professional:1500, innovator:3000 };
 const LEAGUE_ORDER = ['novice','amateur','professional','innovator'];
+// Project submission quota per league (TZ privileges). Innovator = unlimited.
+const LEAGUE_LIMITS = { novice:2, amateur:5, professional:10, innovator:Infinity };
+function leagueLimit() { const v = LEAGUE_LIMITS[CU?.league]; return (v != null) ? v : 2; }
+async function projectCount() {
+  try { const { count } = await sb.from('projects').select('id',{count:'exact',head:true}).eq('user_id', CU.id); return count || 0; }
+  catch(_) { return 0; }
+}
 function computeLeague(xp) {
   if (xp >= 3000) return 'innovator';
   if (xp >= 1500) return 'professional';
@@ -1417,7 +1424,23 @@ async function addComment(projId) {
 }
 
 /* ===== SUBMIT ===== */
-function initSubmit() {
+async function initSubmit() {
+  const act = $('submit-action');
+  // Enforce league submission quota before letting the author start the form.
+  if (CU && sbOk()) {
+    $('submit-body').innerHTML = '<div class="spinner"></div>';
+    const used = await projectCount(), lim = leagueLimit();
+    if (used >= lim) {
+      if (act) act.style.display = 'none';
+      $('submit-body').innerHTML = `<div class="empty" style="padding:48px 24px">
+        <div class="empty-ic">🔒</div>
+        <div class="empty-title">Достигнут лимит лиги</div>
+        <p class="text-hint text-sm" style="margin-top:8px;line-height:1.6">Лига «${esc(L().leagues[CU.league]||'')}» — до <b>${lim}</b> проект(ов). Вы уже подали <b>${used}</b>.<br>Поднимитесь в следующую лигу по итогам сезона, чтобы подавать больше.</p>
+      </div>`;
+      return;
+    }
+  }
+  if (act) act.style.display = '';
   SF = { step:0, name:'', tags:[], pitch:'', prob:'', sol:'', aud:[], kpis:[''], eff:'', cost:-1, need:'', time:'', files:[] };
   renderSubmitStep();
 }
@@ -1571,6 +1594,9 @@ function confirmDialog(msg){
 
 async function saveProject() {
   if (!sbOk() || !CU) { toast('Настройте Supabase и войдите в аккаунт'); return; }
+  // League submission quota (defense — also gated at form entry).
+  const used = await projectCount(), lim = leagueLimit();
+  if (used >= lim) { toast(`Достигнут лимит лиги (${lim}). Поднимитесь выше, чтобы подавать больше.`); return; }
   // Duplicate detection — warn (not block) if a very similar project already exists.
   const dup = await findSimilarProject(SF.name);
   if (dup) {
