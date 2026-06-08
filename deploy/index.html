@@ -574,7 +574,7 @@ async function applyStreak(profile) {
   try {
     await sb.from('profiles').update({ streak_days: streak, last_active_date: today }).eq('id', profile.id);
     profile.streak_days = streak; profile.last_active_date = today;
-    await awardXP(xpFor('daily_streak', 5), `🔥 ${streak} kun ketma-ket / подряд`, '🔥');
+    await awardXP('daily_streak', `🔥 ${streak} kun ketma-ket / подряд`, '🔥');
   } catch(_) {}
 }
 
@@ -906,6 +906,16 @@ function clearLoginErr() {
 }
 
 /* ===== LOGIN ===== */
+// Session token issued by app_login/app_resume. Privileged writes (XP, reviews)
+// go through SECURITY DEFINER RPCs that require this token — the browser can no
+// longer change XP/verdicts directly.
+function tnToken() { try { return localStorage.getItem('tn_token') || ''; } catch(_) { return ''; } }
+function setSession(data) {
+  if (data && data._token) { try { localStorage.setItem('tn_token', data._token); } catch(_) {} delete data._token; }
+  if (data && data.id)     { try { localStorage.setItem('tn_profile_id', data.id); } catch(_) {} }
+  return data;
+}
+
 async function doLogin() {
   const username = $('li-username')?.value.trim().toLowerCase();
   const password = $('li-password')?.value;
@@ -920,16 +930,14 @@ async function doLogin() {
     const { data, error } = await sb.rpc('app_login', { p_username: username, p_hash: hash });
     if (error) { showLoginErr('Ошибка входа, попробуйте ещё раз'); return; }
     if (!data) { showLoginErr('Неверный логин или пароль'); return; }
-    CU = data;
-    localStorage.setItem('tn_profile_id', data.id);
+    CU = setSession(data);
     await linkTelegram(CU);
     await applyStreak(CU);
-    if (isExpertLaunch && data.role !== 'expert' && data.role !== 'admin') {
-      await ensureExpertRole(data.id); CU.role = 'expert';
-    }
     checkUnreadNotifs(); subscribeNotifications();
-    const isExpert = data.role === 'expert';  // admin is observer -> feed, not review
-    go((isExpertLaunch || isExpert) ? 'review' : 'feed');
+    // Routing is role-based only: experts are seeded with role='expert'. Opening
+    // the ?startapp=expert link no longer grants the role to anyone.
+    const isExpert = CU.role === 'expert';  // admin is observer -> feed, not review
+    go(isExpert ? 'review' : 'feed');
     handleDeepLink();
   } catch(e) {
     showLoginErr('Ошибка: ' + e.message);
@@ -945,33 +953,25 @@ function showLoginErr(msg) {
   if (e) { e.textContent = msg; e.classList.add('show'); }
 }
 
-async function ensureExpertRole(profileId) {
-  try {
-    await sb.from('profiles').update({role:'expert'}).eq('id', profileId).neq('role','admin');
-  } catch(e) {}
-}
-
 async function initApp() {
   if (!sbOk()) { showSetupError(); return; }
   loadXpRules();
   try {
-    // Auto-login from localStorage session (previously logged in)
-    const localId = localStorage.getItem('tn_profile_id');
-    if (localId) {
-      const { data } = await sb.from('profiles').select('*').eq('id', localId).single();
+    // Auto-login: resume the server session from the stored token.
+    const token = tnToken();
+    if (token) {
+      const { data } = await sb.rpc('app_resume', { p_token: token });
       if (data) {
         CU = data;
         await linkTelegram(CU);
         await applyStreak(CU);
-        if (isExpertLaunch && data.role !== 'expert' && data.role !== 'admin') {
-          await ensureExpertRole(data.id);
-          CU.role = 'expert';
-        }
         checkUnreadNotifs(); subscribeNotifications();
-        const isExpert = data.role === 'expert' || data.role === 'admin';
-        go((isExpertLaunch || isExpert) ? 'review' : 'feed');
+        const isExpert = CU.role === 'expert';
+        go(isExpert ? 'review' : 'feed');
         return;
       }
+      // Token invalid/expired — clear the stale session and ask to log in again.
+      try { localStorage.removeItem('tn_token'); localStorage.removeItem('tn_profile_id'); } catch(_) {}
     }
     go('welcome');
   } catch(e) { console.error(e); go('welcome'); }
@@ -1094,16 +1094,18 @@ async function doRegister() {
       league: 'novice',
       season_xp: 0,
       global_xp: 0,
-      role: isExpertLaunch ? 'expert' : 'user',
+      role: 'user',   // experts are seeded, never self-registered through this form
       status: 'active'
     }).select().single();
     if (error) throw error;
-    CU = profile;
-    localStorage.setItem('tn_profile_id', profile.id);
-    await awardXP(xpFor('profile_register', 50), L().xp_reg, '✅');
+    // Mint a session token via the normal login path so privileged RPCs work.
+    let sess = null;
+    try { const { data } = await sb.rpc('app_login', { p_username: username, p_hash: password_hash }); sess = data; } catch(_) {}
+    CU = setSession(sess || profile);
+    await awardXP('profile_register', L().xp_reg, '✅');
     haptic('success');
     checkUnreadNotifs(); subscribeNotifications();
-    go(isExpertLaunch ? 'review' : 'feed');
+    go('feed');
   } catch(e) {
     console.error(e);
     if (e.message !== 'Логин уже занят') toast('Ошибка: ' + (e.message || 'попробуйте снова'));
@@ -1115,6 +1117,9 @@ async function doRegister() {
 
 async function logout() {
   if (!confirm('Выйти из аккаунта?')) return;
+  const tok = tnToken();
+  if (tok) { try { await sb.rpc('app_logout', { p_token: tok }); } catch(_) {} }
+  localStorage.removeItem('tn_token');
   localStorage.removeItem('tn_profile_id');
   CU = null;
   if (notifChannel) { try { sb.removeChannel(notifChannel); } catch(e) {} notifChannel = null; }
@@ -1480,7 +1485,7 @@ async function addComment(projId) {
     try { await sb.rpc('increment_comments',{proj_id:projId}); } catch(e) {}
     inp.value = '';
     if (text.length >= 50) {
-      await awardXP(xpFor('comment', 5), L().xp_comment, '💬');
+      await awardXP('comment', L().xp_comment, '💬');
       toast('Комментарий добавлен! +5 XP 🎉');
     } else { toast('Комментарий добавлен!'); }
     loadComments(projId);
@@ -1789,7 +1794,7 @@ async function saveProject() {
       } catch(e) { console.warn('Review assign error:', e.message); }
     }
 
-    await awardXP(xpFor('project_submit', 50), L().xp_submit, '📤');
+    await awardXP('project_submit', L().xp_submit, '📤');
     haptic('success');
     $('submit-body').innerHTML = `
       <div class="success-wrap">
@@ -2088,18 +2093,15 @@ async function markIncubatorReady(pid, authorId) {
 }
 
 /* ===== XP ENGINE ===== */
-async function awardXP(amount, reason, icon='⭐') {
+// XP is granted server-side: the RPC looks up the amount for `action` in xp_rules
+// (the client can no longer choose the number) and credits only the session user.
+async function awardXP(action, reason, icon='⭐') {
   if (!CU || !sbOk()) return;
   if (CU.role === 'admin') return;  // admin earns no XP (silent observer)
+  const tok = tnToken(); if (!tok) return;
   try {
-    await sb.from('xp_transactions').insert({user_id:CU.id,amount,reason,icon});
-    const newSeason = (CU.season_xp||0) + amount;
-    const newGlobal = (CU.global_xp||0) + amount;
-    // League is NOT recomputed from XP here — it changes only at the quarterly
-    // season rollover (promotion/relegation, TZ §3.2), handled by the bot CRON.
-    await sb.from('profiles').update({season_xp:newSeason,global_xp:newGlobal}).eq('id',CU.id);
-    CU.season_xp = newSeason;
-    CU.global_xp = newGlobal;
+    const { data } = await sb.rpc('app_award_xp', { p_token: tok, p_action: action, p_reason: reason, p_icon: icon });
+    if (data) { CU.season_xp = data.season_xp; CU.global_xp = data.global_xp; }
   } catch(e) { console.error('XP error:', e); }
 }
 
@@ -2222,65 +2224,29 @@ async function submitReview(reviewId, decision) {
   const ta = document.getElementById('rv-text-'+reviewId);
   const text = ta?.value.trim() || '';
   if (wc(text) < 150) { toast('Напишите минимум 150 слов в рецензии'); return; }
+  const tok = tnToken();
+  if (!tok) { toast('Сессия истекла — войдите заново'); return; }
   try {
-    // Save review and get project_id back
-    const { data: rev, error } = await sb.from('reviews')
-      .update({decision, review_text: text, reviewed_at: new Date().toISOString()})
-      .eq('id', reviewId)
-      .select('project_id')
-      .single();
+    // The whole verdict (review save + vote tally + project status + author
+    // notification + expert XP) is computed server-side. The browser can no
+    // longer set a project's status or review another expert's assignment.
+    const { data, error } = await sb.rpc('app_submit_review', {
+      p_token: tok, p_review_id: reviewId, p_decision: decision, p_text: text,
+    });
     if (error) throw error;
-
-    await awardXP(xpFor('expert_review', 20), 'Рецензия проекта / Retsenziya', '🔍');
     haptic('success');
+    if (CU) { CU.season_xp = (CU.season_xp||0) + (data?.xp||0); CU.global_xp = (CU.global_xp||0) + (data?.xp||0); }
 
-    // Check all votes for this project and decide
-    if (rev?.project_id) {
-      const { data: allRevs } = await sb.from('reviews')
-        .select('decision').eq('project_id', rev.project_id);
-
-      const total   = allRevs?.length || 0;
-      const voted   = allRevs?.filter(r => r.decision !== null).length || 0;
-      const approve = allRevs?.filter(r => r.decision === 'approve').length || 0;
-      const reject  = allRevs?.filter(r => r.decision === 'reject').length || 0;
-      const revision= allRevs?.filter(r => r.decision === 'revision').length || 0;
-      const majority = Math.ceil(total / 2 + 0.01); // >50%
-
-      let newStatus = null;
-      if      (approve  >= majority) newStatus = 'approved';
-      else if (reject   >= majority) newStatus = 'rejected';
-      else if (revision >= majority) newStatus = null; // stays under_review
-      else if (voted === total && total > 0) {
-        // All voted, no clear majority → plurality wins
-        const max = Math.max(approve, reject, revision);
-        if      (approve  === max) newStatus = 'approved';
-        else if (reject   === max) newStatus = 'rejected';
-        // revision tie → stays under_review
-      }
-
-      if (newStatus) {
-        // Get project title + author to send notification
-        const { data: proj } = await sb.from('projects').select('title, user_id').eq('id', rev.project_id).single();
-        await sb.from('projects').update({status: newStatus}).eq('id', rev.project_id);
-        if (proj?.user_id) {
-          const notifTitle = newStatus === 'approved'
-            ? `✅ Ваш проект одобрен экспертами`
-            : `📢 Проект опубликован в общую ленту`;
-          const notifBody = newStatus === 'approved'
-            ? `"${proj.title}" прошёл экспертизу и перешёл на следующий этап!`
-            : `"${proj.title}" отклонён экспертами, но опубликован в ленту для обсуждения.`;
-          await createNotification(proj.user_id, newStatus, notifTitle, notifBody, rev.project_id);
-        }
-        const msg = newStatus === 'approved'
-          ? '✅ Проект одобрен экспертами и перешёл на следующий этап!'
-          : '📢 Проект отклонён экспертами и опубликован в общую ленту';
-        setTimeout(() => toast(msg), 600);
-      }
+    const newStatus = data?.new_status || null;
+    if (newStatus) {
+      const msg = newStatus === 'approved'
+        ? '✅ Проект одобрен экспертами и перешёл на следующий этап!'
+        : '📢 Проект отклонён экспертами и опубликован в общую ленту';
+      setTimeout(() => toast(msg), 600);
     }
-
-    toast('Рецензия отправлена! +20 XP');
+    toast('Рецензия отправлена! +' + (data?.xp || 20) + ' XP');
     loadReviews();
-  } catch(e) { toast('Ошибка: ' + e.message); }
+  } catch(e) { toast('Ошибка: ' + (e.message || 'не удалось отправить')); }
 }
 
 /* ===== ADMIN ===== */
