@@ -1745,11 +1745,11 @@ async function awardXP(amount, reason, icon='⭐') {
     await sb.from('xp_transactions').insert({user_id:CU.id,amount,reason,icon});
     const newSeason = (CU.season_xp||0) + amount;
     const newGlobal = (CU.global_xp||0) + amount;
-    const newLeague = computeLeague(newSeason);
-    await sb.from('profiles').update({season_xp:newSeason,global_xp:newGlobal,league:newLeague}).eq('id',CU.id);
+    // League is NOT recomputed from XP here — it changes only at the quarterly
+    // season rollover (promotion/relegation, TZ §3.2), handled by the bot CRON.
+    await sb.from('profiles').update({season_xp:newSeason,global_xp:newGlobal}).eq('id',CU.id);
     CU.season_xp = newSeason;
     CU.global_xp = newGlobal;
-    CU.league = newLeague;
   } catch(e) { console.error('XP error:', e); }
 }
 

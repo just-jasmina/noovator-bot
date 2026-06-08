@@ -38,13 +38,15 @@ async def run_bot():
 
     await set_bot_commands(bot)
 
-    # Run Telegram polling, the push-notification pusher and the SLA watcher together.
+    # Run Telegram polling + background workers (push, SLA watcher, season CRON) together.
     from .notifier import run_notifier
     from .sla import run_sla_watch
+    from .season import run_season_cron
     await asyncio.gather(
         dp.start_polling(bot, allowed_updates=["message", "callback_query"]),
         run_notifier(bot),
         run_sla_watch(bot),
+        run_season_cron(bot),
     )
 
 
