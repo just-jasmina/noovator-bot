@@ -478,6 +478,15 @@ textarea.input{resize:vertical;min-height:96px}
   <div id="review-body" style="flex:1;overflow-y:auto;padding:var(--pad)"></div>
 </div>
 
+<!-- ===== INCUBATOR ===== -->
+<div id="s-incubator" class="screen">
+  <div class="topbar">
+    <button class="btn-back" onclick="go('profile')">‹ Назад</button>
+    <div class="topbar-title">🤝 Инкубатор</div>
+  </div>
+  <div id="incubator-body" style="flex:1;overflow-y:auto;padding:var(--pad)"></div>
+</div>
+
 <!-- ===== NOTIFICATIONS ===== -->
 <div id="s-notif" class="screen">
   <div class="topbar">
@@ -802,6 +811,7 @@ function go(screen, opts={}) {
   if (screen === 'profile') loadProfile();
   if (screen === 'submit') initSubmit();
   if (screen === 'review') loadReviews();
+  if (screen === 'incubator') loadIncubator();
   if (screen === 'admin') loadAdmin('stats');
   if (screen === 'notif') loadNotifications();
   if (screen === 'project' && opts.id) openProject(opts.id);
@@ -1241,6 +1251,9 @@ async function openProject(id) {
     const badge = L().league_badges[lg];
     const sLabel = L().statuses[p.status]||p.status;
     const { data: liked } = CU ? await sb.from('likes').select('id').eq('project_id',id).eq('user_id',CU.id).maybeSingle() : { data: null };
+    // Mentor opt-in: an Innovator can join an approved project (without a mentor) as its mentor.
+    const { data: mtr } = await sb.from('mentorships').select('id').eq('project_id',id).maybeSingle();
+    const canMentor = CU?.league==='innovator' && p.status==='approved' && p.user_id!==CU.id && !mtr;
     const isLiked = !!liked;
     const tags = (p.tags||[]).map(t=>`<span class="proj-tag" style="font-size:12px;padding:4px 10px">${esc(tagLabel(t))}</span>`).join('');
     const kpis = (p.kpis||[]).filter(k=>k.trim()).map(k=>`<li style="margin-bottom:6px">${esc(k)}</li>`).join('');
@@ -1258,6 +1271,8 @@ async function openProject(id) {
       </div>
       <div class="flex" style="flex-wrap:wrap;gap:6px;margin-bottom:16px">${tags}</div>
       ${lifecycleTracker(p.status)}
+      ${canMentor ? `<button class="btn sm" style="width:100%;margin-bottom:14px;background:#7c3aed" onclick="becomeMentor('${esc(id)}','${esc(p.user_id)}')">🤝 Стать ментором проекта</button>` : ''}
+      ${mtr ? `<div class="card-simple" style="margin-bottom:14px;padding:10px 12px;border-left:3px solid #7c3aed"><span style="font-size:12px;color:#7c3aed;font-weight:600">🤝 У проекта есть ментор (Инкубатор)</span></div>` : ''}
       <div class="card-simple">
         <div style="font-size:13px;font-weight:700;color:var(--hint);margin-bottom:6px">КРАТКО</div>
         <p style="font-size:14px;line-height:1.6">${esc(p.pitch)}</p>
@@ -1766,6 +1781,7 @@ async function loadProfile() {
       <div class="card-simple"><ul style="padding-left:18px">${privs}</ul></div>
 
       ${CU.role==='expert' ? `<button class="btn ghost sm" onclick="go('review')" style="margin-bottom:12px">🔍 Очередь на экспертизу</button>` : ''}
+      ${CU.role!=='admin' ? `<button class="btn ghost sm" onclick="go('incubator')" style="margin-bottom:12px">🤝 Инкубатор${CU.league==='innovator'?' · ментор':''}</button>` : ''}
       ${CU.role==='admin' ? `<button class="btn sm" onclick="go('admin')" style="margin-bottom:12px;background:#5469d4">⚙️ Панель администратора</button>` : ''}
 
       ${CU.role!=='admin' ? `
@@ -1808,6 +1824,142 @@ async function loadXpHistory() {
         <div class="xp-amt ${x.amount>=0?'xp-pos':'xp-neg'}">${x.amount>=0?'+':''}${fmt(x.amount)} XP</div>
       </div>`).join('');
   } catch(e) { box.innerHTML = ''; }
+}
+
+/* ===== MENTOR + INCUBATOR ===== */
+const INCUBATOR_CHECKLIST = ['Бизнес-модель проработана','KPI измеримы и реалистичны','Бюджет обоснован','Команда/ответственные определены','План пилота готов','Презентация к защите готова'];
+let incubatorChannel = null;
+
+async function loadIncubator() {
+  const body = $('incubator-body');
+  if (!CU || !sbOk()) { body.innerHTML = '<div class="empty"><div class="empty-ic">🔒</div><div class="empty-title">Войдите в аккаунт</div></div>'; return; }
+  if (incubatorChannel) { try { sb.removeChannel(incubatorChannel); } catch(_){} incubatorChannel = null; }
+  body.innerHTML = '<div class="spinner"></div>';
+  try {
+    const { data: mine } = await sb.from('mentorships')
+      .select('*, projects!mentorships_project_id_fkey(title,status), mentor:profiles!mentorships_mentor_id_fkey(full_name), author:profiles!mentorships_author_id_fkey(full_name)')
+      .or(`author_id.eq.${CU.id},mentor_id.eq.${CU.id}`).order('created_at',{ascending:false});
+    const asAuthor = (mine||[]).filter(m=>m.author_id===CU.id);
+    const asMentor = (mine||[]).filter(m=>m.mentor_id===CU.id);
+
+    const card = (m,role) => {
+      const done=(m.checklist||[]).length, total=INCUBATOR_CHECKLIST.length;
+      const other = role==='author' ? (m.mentor?.full_name||'Ментор') : (m.author?.full_name||'Автор');
+      const ready = m.status==='ready';
+      return `<div class="card-simple" style="margin-bottom:10px;padding:12px;cursor:pointer" onclick="openIncubator('${esc(m.project_id)}')">
+        <div class="flex items-center gap8" style="justify-content:space-between">
+          <div class="fw7 text-sm" style="min-width:0">${esc(m.projects?.title||'—')}</div>
+          ${ready?'<span class="btn-xs bx-ok">✅ Готов к пилоту</span>':`<span class="btn-xs" style="background:#5469d422;color:#5469d4">${done}/${total}</span>`}
+        </div>
+        <div class="text-hint" style="font-size:11px;margin-top:4px">${role==='author'?'🧑‍🏫 Ментор':'🧑‍💻 Автор'}: ${esc(other)}</div>
+      </div>`;
+    };
+
+    let html = '';
+    if (asAuthor.length) html += `<div class="section-h" style="margin-top:0">📦 Мои проекты в инкубаторе</div>` + asAuthor.map(m=>card(m,'author')).join('');
+    if (asMentor.length) html += `<div class="section-h">🧑‍🏫 Я менторю</div>` + asMentor.map(m=>card(m,'mentor')).join('');
+
+    if (CU.league === 'innovator') {
+      const { data: taken } = await sb.from('mentorships').select('project_id');
+      const takenSet = new Set((taken||[]).map(t=>t.project_id));
+      const { data: appr } = await sb.from('projects').select('id,title,tags,user_id').eq('status','approved').limit(50);
+      const avail = (appr||[]).filter(p=>!takenSet.has(p.id) && p.user_id!==CU.id);
+      html += `<div class="section-h">🌱 Проекты, ищущие ментора</div>`;
+      html += avail.length ? avail.map(p=>`<div class="card-simple" style="margin-bottom:10px;padding:12px">
+          <div class="fw7 text-sm">${esc(p.title)}</div>
+          <div class="proj-tags" style="margin:6px 0">${(p.tags||[]).map(t=>`<span class="proj-tag">${esc(tagLabel(t))}</span>`).join('')}</div>
+          <button class="btn sm" style="margin-top:4px" onclick="becomeMentor('${esc(p.id)}','${esc(p.user_id)}')">🤝 Стать ментором</button>
+        </div>`).join('') : '<div class="text-hint text-sm" style="padding:6px 0">Сейчас нет проектов без ментора</div>';
+    }
+
+    if (!html) html = `<div class="empty"><div class="empty-ic">🤝</div><div class="empty-title">Пока пусто</div><p class="text-hint text-sm">Одобренные проекты получают ментора-Новатора для подготовки к пилоту.${CU.league!=='innovator'?'<br>Менторство доступно лиге «Новатор».':''}</p></div>`;
+    body.innerHTML = html;
+  } catch(e) { body.innerHTML = `<p style="color:var(--danger);padding:16px">${esc(e.message)}</p>`; }
+}
+
+async function becomeMentor(pid, authorId) {
+  if (!CU || CU.league !== 'innovator') { toast('Менторство доступно только лиге «Новатор»'); return; }
+  if (authorId === CU.id) { toast('Нельзя менторить собственный проект'); return; }
+  try {
+    const { error } = await sb.from('mentorships').insert({ project_id:pid, mentor_id:CU.id, author_id:authorId, status:'active', checklist:[] });
+    if (error) throw error;
+    await sb.from('notifications').insert({ user_id:authorId, type:'mentor_assigned', title:'🤝 У вашего проекта появился ментор!', body:`Новатор «${CU.full_name||'ментор'}» присоединился к проекту в Инкубаторе.`, project_id:pid, is_read:false, tg_pushed:false });
+    haptic('success'); toast('Вы стали ментором 🤝');
+    openIncubator(pid);
+  } catch(e) { toast(/duplicate|unique/i.test(e.message)?'У проекта уже есть ментор':'Ошибка: '+e.message); }
+}
+
+async function openIncubator(pid) {
+  const body = $('incubator-body');
+  body.innerHTML = '<div class="spinner"></div>';
+  if (incubatorChannel) { try { sb.removeChannel(incubatorChannel); } catch(_){} incubatorChannel = null; }
+  try {
+    const { data: m } = await sb.from('mentorships')
+      .select('*, projects!mentorships_project_id_fkey(title), mentor:profiles!mentorships_mentor_id_fkey(full_name), author:profiles!mentorships_author_id_fkey(full_name)')
+      .eq('project_id', pid).single();
+    if (!m) { body.innerHTML = '<p class="text-hint" style="padding:24px">Инкубатор не найден</p>'; return; }
+    const isMentor = m.mentor_id===CU.id, isAuthor = m.author_id===CU.id;
+    if (!isMentor && !isAuthor) { body.innerHTML = '<div class="empty"><div class="empty-ic">🔒</div><div class="empty-title">Доступ только участникам инкубатора</div></div>'; return; }
+    const done = new Set(m.checklist||[]);
+    const allDone = INCUBATOR_CHECKLIST.every((_,i)=>done.has(i));
+    const checklistHtml = INCUBATOR_CHECKLIST.map((it,i)=>`<div class="check-opt${done.has(i)?' sel':''}" onclick="toggleChecklist('${esc(pid)}',${i})"><div class="check-box">${done.has(i)?'✓':''}</div>${esc(it)}</div>`).join('');
+    const { data: msgs } = await sb.from('incubator_messages').select('*').eq('project_id',pid).order('created_at',{ascending:true}).limit(300);
+
+    body.innerHTML = `
+      <button class="btn ghost sm" onclick="loadIncubator()" style="margin-bottom:12px">‹ К списку</button>
+      <div class="card-simple" style="margin-bottom:14px">
+        <div class="fw7" style="margin-bottom:4px">${esc(m.projects?.title||'—')}</div>
+        <div class="text-hint" style="font-size:12px">🧑‍🏫 ${esc(m.mentor?.full_name||'—')} · 🧑‍💻 ${esc(m.author?.full_name||'—')}</div>
+      </div>
+      <div class="section-h" style="margin-top:0">✅ Чек-лист готовности к защите</div>
+      ${checklistHtml}
+      ${m.status==='ready' ? '<div class="card-simple" style="margin-top:10px;border-left:3px solid #16a34a"><b style="color:#16a34a">✅ Проект отмечен готовым к пилоту</b></div>' : (isMentor && allDone ? `<button class="btn sm success" style="margin-top:10px;width:100%" onclick="markIncubatorReady('${esc(pid)}','${esc(m.author_id)}')">🚀 Отметить готовым к пилоту</button>` : '')}
+      <div class="section-h">💬 Чат инкубатора <span class="text-hint" style="font-weight:400;text-transform:none">(приватно)</span></div>
+      <div id="inc-msgs" style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:10px">${(msgs||[]).map(renderIncMsg).join('')}</div>
+      <div style="display:flex;gap:8px">
+        <textarea class="input" id="inc-input" placeholder="Сообщение…" style="min-height:44px;flex:1"></textarea>
+        <button class="btn sm" onclick="sendIncubatorMsg('${esc(pid)}','${esc(isMentor?m.author_id:m.mentor_id)}')">➤</button>
+      </div>`;
+    const box = $('inc-msgs'); if (box) box.scrollTop = box.scrollHeight;
+    incubatorChannel = sb.channel('inc-'+pid)
+      .on('postgres_changes', { event:'INSERT', schema:'public', table:'incubator_messages', filter:`project_id=eq.${pid}` },
+        (payload)=>{ const b=$('inc-msgs'); if(b){ b.insertAdjacentHTML('beforeend', renderIncMsg(payload.new)); b.scrollTop=b.scrollHeight; } })
+      .subscribe();
+  } catch(e) { body.innerHTML = `<p style="color:var(--danger);padding:16px">${esc(e.message)}</p>`; }
+}
+
+function renderIncMsg(msg) {
+  const mine = msg.user_id===CU?.id;
+  return `<div style="align-self:${mine?'flex-end':'flex-start'};max-width:80%;background:${mine?'var(--accent)':'var(--card)'};color:${mine?'#fff':'var(--text)'};border:1px solid var(--sep);border-radius:14px;padding:8px 12px;font-size:13px;line-height:1.45">${esc(msg.text)}<div style="font-size:9px;opacity:.6;margin-top:3px">${fmtDate(msg.created_at)}</div></div>`;
+}
+
+async function sendIncubatorMsg(pid, otherId) {
+  const input = $('inc-input'); const text = input?.value.trim();
+  if (!text) return;
+  input.value = '';
+  try {
+    await sb.from('incubator_messages').insert({ project_id:pid, user_id:CU.id, text });
+    await sb.from('notifications').insert({ user_id:otherId, type:'incubator_message', title:'💬 Новое сообщение в Инкубаторе', body:(CU.full_name||'Участник')+': '+(text.length>80?text.slice(0,80)+'…':text), project_id:pid, is_read:false, tg_pushed:false });
+  } catch(e) { toast('Ошибка отправки'); }
+}
+
+async function toggleChecklist(pid, idx) {
+  try {
+    const { data: m } = await sb.from('mentorships').select('checklist').eq('project_id',pid).single();
+    const set = new Set(m?.checklist||[]);
+    set.has(idx) ? set.delete(idx) : set.add(idx);
+    await sb.from('mentorships').update({ checklist: Array.from(set) }).eq('project_id',pid);
+    openIncubator(pid);
+  } catch(e) { toast('Ошибка'); }
+}
+
+async function markIncubatorReady(pid, authorId) {
+  try {
+    await sb.from('mentorships').update({ status:'ready' }).eq('project_id',pid);
+    await sb.from('notifications').insert({ user_id:authorId, type:'incubator_message', title:'🚀 Проект готов к пилоту!', body:'Ментор отметил ваш проект готовым к переходу на пилот.', project_id:pid, is_read:false, tg_pushed:false });
+    haptic('success'); toast('Отмечено готовым к пилоту 🚀');
+    openIncubator(pid);
+  } catch(e) { toast('Ошибка'); }
 }
 
 /* ===== XP ENGINE ===== */

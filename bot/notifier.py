@@ -27,6 +27,8 @@ TYPE_EMOJI = {
     "revision": "↩️",
     "comment_reply": "💬",
     "mentor_request": "🤝",
+    "mentor_assigned": "🤝",
+    "incubator_message": "💬",
     "league_change": "🏆",
     "sla": "⏰",
     "profile_verified": "🎉",
