@@ -377,6 +377,10 @@ textarea.input{resize:vertical;min-height:96px}
       <input class="input" id="r-workplace" type="text" placeholder="Название организации" oninput="checkRegForm()">
     </div>
     <div class="group">
+      <label class="lbl">Регион</label>
+      <select class="input" id="r-region"></select>
+    </div>
+    <div class="group">
       <label class="lbl">Специализация (теги)</label>
       <div class="hint-text" style="margin-bottom:8px">Выберите до 3 направлений для экспертизы</div>
       <div class="flex" style="flex-wrap:wrap;gap:8px" id="r-tags"></div>
@@ -506,6 +510,7 @@ textarea.input{resize:vertical;min-height:96px}
   <div style="padding:12px var(--pad) 0">
     <div class="tabs">
       <button class="tab on" id="adm-stats-tab" onclick="showAdminTab('stats')">📊 Статистика</button>
+      <button class="tab" id="adm-reserve-tab" onclick="showAdminTab('reserve')">🎖 Резерв</button>
       <button class="tab" id="adm-fraud-tab" onclick="showAdminTab('fraud')">🛡 Антифрод</button>
       <button class="tab" id="adm-users-tab" onclick="showAdminTab('users')">Пользователи</button>
       <button class="tab" id="adm-projs-tab" onclick="showAdminTab('projects')">Проекты</button>
@@ -729,6 +734,8 @@ const LEAGUE_XP = { novice:0, amateur:500, professional:1500, innovator:3000 };
 const LEAGUE_ORDER = ['novice','amateur','professional','innovator'];
 // Project submission quota per league (TZ privileges). Innovator = unlimited.
 const LEAGUE_LIMITS = { novice:2, amateur:5, professional:10, innovator:Infinity };
+// Regions of Uzbekistan (for talent registry & ministry analytics).
+const UZ_REGIONS = ['Toshkent shahri','Toshkent viloyati','Andijon','Buxoro','Fargʻona','Jizzax','Xorazm','Namangan','Navoiy','Qashqadaryo','Qoraqalpogʻiston','Samarqand','Sirdaryo','Surxondaryo'];
 function leagueLimit() { const v = LEAGUE_LIMITS[CU?.league]; return (v != null) ? v : 2; }
 async function projectCount() {
   try { const { count } = await sb.from('projects').select('id',{count:'exact',head:true}).eq('user_id', CU.id); return count || 0; }
@@ -969,6 +976,11 @@ function buildRegForm() {
     const labs = ['Место учёбы','Место работы','Место учёбы / работы'];
     wpLbl.textContent = labs[regOcc] || 'Место работы/учёбы';
   } else { wpWrap.style.display='none'; }
+  const regSel = $('r-region');
+  if (regSel && !regSel.dataset.filled) {
+    regSel.innerHTML = '<option value="">— Регион не указан —</option>' + UZ_REGIONS.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join('');
+    regSel.dataset.filled = '1';
+  }
   const tagsBox = $('r-tags');
   tagsBox.innerHTML = L().tags.map((t,i) => `
     <span class="chip${regTags.includes(i)?' sel':''}" onclick="toggleRegTag(${i})">#${esc(t)}</span>`).join('');
@@ -1041,6 +1053,7 @@ async function doRegister() {
       pnfl: pnfl || null,
       occupation: regOcc,
       workplace: workplace || null,
+      region: ($('r-region')?.value || null),
       expert_tags: regTags.map(i => CANON_TAGS[i]),
       telegram_id: tgUserId(),
       league: 'novice',
@@ -1460,6 +1473,79 @@ async function initSubmit() {
   renderSubmitStep();
 }
 
+/* ===== SMART ASSISTANT (heuristic; upgradeable to Claude API via backend) ===== */
+function openModal(html) {
+  let ov = document.getElementById('app-modal');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id='app-modal';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:flex-end;justify-content:center';
+    ov.onclick=(e)=>{ if(e.target===ov) ov.remove(); };
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML = `<div style="background:var(--card);width:100%;max-width:440px;border-radius:18px 18px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));max-height:82vh;overflow-y:auto">${html}</div>`;
+}
+function closeModal(){ document.getElementById('app-modal')?.remove(); }
+
+// Keyword -> direction index (aligned with CANON_TAGS / L().tags order).
+const TAG_KEYWORDS = {
+  0:['it','цифров','програм','софт','приложен','платформ','данны','digital','онлайн','автоматиз'],
+  1:['организац','управлен','поликлин','больниц','здравоохран','очеред','маршрут','логистик'],
+  2:['лекарств','препарат','фармак','дозиров','аптек','таблетк'],
+  3:['дет','педиатр','новорожд','младен','вакцин','подрост','школьник'],
+  4:['хирург','операц','скальпел','имплант','анестез','трансплант'],
+  5:['прибор','устройств','оборудован','датчик','медтехник','аппарат','сенсор'],
+  6:['ai','ии','нейросет','машинн','алгоритм','предсказ','интеллект','распознав'],
+  7:['эпидем','инфекц','санитар','вспышк','карантин','вирус','профилакт'],
+  8:['обучен','образован','студент','курс','тренинг','симулятор','лекци'],
+  9:['лаборатор','анализ','диагност','проб','реактив','биопси'],
+  10:['закон','прав','юрид','норматив','регулир','лиценз'],
+  11:['финанс','бюджет','стоимост','эконом','окупаем','инвест','затрат'],
+};
+const KPI_EXAMPLES = {
+  0:'Сокращение времени обработки на 30%', 1:'Снижение времени ожидания пациентов на 40%',
+  2:'Снижение побочных эффектов на 25%', 3:'Рост охвата вакцинацией на 20%',
+  4:'Сокращение послеоперационных осложнений на 15%', 5:'Точность измерений 95%',
+  6:'Точность авто-диагностики 94%', 7:'Раннее выявление вспышек на 3 дня',
+  8:'Рост успеваемости/компетенций на 30%', 9:'Сокращение времени анализа на 50%',
+  10:'Соответствие нормативам 100%', 11:'Окупаемость за 12 месяцев',
+};
+function suggestTags(text){ const t=(text||'').toLowerCase(); const out=[]; for(const k in TAG_KEYWORDS){ if(TAG_KEYWORDS[k].some(w=>t.includes(w))) out.push(+k); } return out; }
+function assistantAddTag(i){ if(!SF.tags.includes(i) && SF.tags.length<3){ SF.tags.push(i); renderSubmitStep(); } showAssistant(); }
+
+function showAssistant() {
+  const text = [SF.name, SF.pitch, SF.prob, SF.sol].join(' ');
+  const sugg = suggestTags(text).filter(i=>!SF.tags.includes(i));
+  const tagHtml = sugg.length
+    ? sugg.map(i=>`<span class="chip" onclick="assistantAddTag(${i})">+ #${esc(L().tags[i])}</span>`).join('')
+    : '<span class="text-hint text-sm">Теги уже подобраны или мало текста — заполните «проблему» и «решение».</span>';
+  const checks = [
+    ['Название', !!(SF.name||'').trim()],
+    ['Краткое описание (≤150 слов)', !!(SF.pitch||'').trim() && wc(SF.pitch)<=150],
+    ['1–3 направления', SF.tags.length>=1],
+    ['Проблема описана', !!(SF.prob||'').trim()],
+    ['Решение описано', !!(SF.sol||'').trim()],
+    ['Хотя бы 1 KPI', (SF.kpis||[]).some(k=>(k||'').trim())],
+    ['Бюджет указан', SF.cost>=0],
+  ];
+  const score = Math.round(checks.filter(c=>c[1]).length/checks.length*100);
+  const checkHtml = checks.map(c=>`<div style="font-size:13px;padding:3px 0">${c[1]?'✅':'⬜'} ${c[0]}</div>`).join('');
+  const kpiHtml = SF.tags.length
+    ? SF.tags.map(i=>KPI_EXAMPLES[i]).filter(Boolean).map(k=>`<div style="font-size:12px;color:var(--text2);padding:2px 0">• ${esc(k)}</div>`).join('')
+    : '<span class="text-hint text-sm">Выберите направления для примеров KPI</span>';
+  openModal(`
+    <div style="font-size:17px;font-weight:800">💡 Помощник</div>
+    <div class="text-hint" style="font-size:12px;margin-bottom:12px">Подсказки по заполнению паспорта проекта</div>
+    <div class="section-h" style="margin-top:0">Готовность: ${score}%</div>
+    <div style="height:8px;background:var(--bg);border-radius:4px;overflow:hidden;margin-bottom:10px"><div style="width:${score}%;height:100%;background:${score>=80?'#16a34a':score>=50?'#d4a017':'#dc2626'}"></div></div>
+    ${checkHtml}
+    <div class="section-h">🏷 Рекомендуемые направления</div>
+    <div class="flex" style="flex-wrap:wrap;gap:8px">${tagHtml}</div>
+    <div class="section-h">📊 Примеры KPI для ваших направлений</div>
+    ${kpiHtml}
+    <button class="btn sm" style="width:100%;margin-top:16px" onclick="closeModal()">Понятно</button>
+  `);
+}
+
 function renderSubmitStep() {
   const s = SF.step;
   const body = $('submit-body');
@@ -1474,6 +1560,7 @@ function renderSubmitStep() {
     <div class="step-head">
       <span class="step-num">Шаг ${s+1}/5</span>
       <span class="step-title">${esc(stepTitles[s])}</span>
+      <button class="btn-xs" style="margin-left:auto;background:#7c3aed22;color:#7c3aed;font-weight:700" onclick="showAssistant()">💡 Помощник</button>
     </div>`;
 
   if (s === 0) {
@@ -2163,6 +2250,7 @@ let adminTab = 'stats';
 function showAdminTab(tab) {
   adminTab = tab;
   $('adm-stats-tab')?.classList.toggle('on', tab==='stats');
+  $('adm-reserve-tab')?.classList.toggle('on', tab==='reserve');
   $('adm-fraud-tab')?.classList.toggle('on', tab==='fraud');
   $('adm-users-tab')?.classList.toggle('on', tab==='users');
   $('adm-projs-tab')?.classList.toggle('on', tab==='projects');
@@ -2179,6 +2267,8 @@ async function loadAdmin(tab='users') {
   try {
     if (tab === 'stats') {
       await renderAdminStats(body);
+    } else if (tab === 'reserve') {
+      await renderReserve(body);
     } else if (tab === 'fraud') {
       await renderAntifraud(body);
     } else if (tab === 'users') {
@@ -2205,6 +2295,98 @@ async function loadAdmin(tab='users') {
         </div>`).join('');
     }
   } catch(e) { body.innerHTML = `<p style="color:var(--danger);padding:16px">${esc(e.message)}</p>`; }
+}
+
+// Generic CSV download (UTF-8 BOM for Excel).
+function downloadCSV(filename, headers, rows) {
+  const q = v => '"' + String(v==null?'':v).replace(/"/g,'""') + '"';
+  const csv = [headers.map(q).join(','), ...rows.map(r=>r.map(q).join(','))].join('\r\n');
+  try {
+    const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 1500);
+    toast('📥 Файл выгружен: '+filename);
+  } catch(e) { toast('Скачивание недоступно здесь — откройте на десктопе'); }
+}
+
+async function exportProjectsCSV() {
+  const { data } = await sb.from('projects').select('title,status,tags,created_at,likes_count, profiles!projects_user_id_fkey(full_name,region)');
+  const rows = (data||[]).map(p => [
+    p.title, L().statuses[p.status]||p.status, (p.tags||[]).map(tagLabel).join('; '),
+    p.profiles?.full_name||'', p.profiles?.region||'', p.likes_count||0,
+    p.created_at ? new Date(p.created_at).toISOString().slice(0,10) : ''
+  ]);
+  downloadCSV('projects.csv', ['Проект','Статус','Направления','Автор','Регион','Лайки','Дата'], rows);
+}
+
+async function exportTalentCSV() {
+  const { data } = await sb.from('profiles').select('full_name,league,global_xp,region,workplace,phone')
+    .in('league',['professional','innovator']).neq('role','admin').order('global_xp',{ascending:false});
+  const rows = (data||[]).map(u => [u.full_name, L().leagues[u.league]||u.league, u.global_xp||0, u.region||'', u.workplace||'', u.phone||'']);
+  downloadCSV('kadrovyy_rezerv.csv', ['ФИО','Лига','Global XP','Регион','Место работы','Телефон'], rows);
+}
+
+async function exportRegionsCSV(regionRows) {
+  downloadCSV('po_regionam.csv', ['Регион','Пользователей','Проектов'], regionRows.map(r=>[r.region, r.users, r.projects]));
+}
+
+async function renderReserve(body) {
+  const [pf, pr] = await Promise.all([
+    sb.from('profiles').select('id,full_name,league,global_xp,region,workplace,role').neq('role','admin'),
+    sb.from('projects').select('user_id,status'),
+  ]);
+  const U = pf.data||[], P = pr.data||[];
+  const regionById = {}; U.forEach(u => regionById[u.id] = u.region || '— не указан —');
+
+  // --- Region aggregation ---
+  const ru = {}, rp = {};
+  U.forEach(u => { const r = u.region || '— не указан —'; ru[r] = (ru[r]||0)+1; });
+  P.forEach(p => { const r = regionById[p.user_id] || '— не указан —'; rp[r] = (rp[r]||0)+1; });
+  const regionRows = Array.from(new Set([...Object.keys(ru), ...Object.keys(rp)]))
+    .map(r => ({ region:r, users:ru[r]||0, projects:rp[r]||0 }))
+    .sort((a,b)=>b.projects-a.projects || b.users-a.users);
+  const maxRP = Math.max(1, ...regionRows.map(r=>r.projects));
+
+  // --- Talent pool (Professionals + Novators) ---
+  const pcount = {}, acount = {};
+  P.forEach(p => { pcount[p.user_id]=(pcount[p.user_id]||0)+1; if(['approved','pilot','scale'].includes(p.status)) acount[p.user_id]=(acount[p.user_id]||0)+1; });
+  const talent = U.filter(u => u.league==='professional' || u.league==='innovator')
+    .map(u => ({...u, projects:pcount[u.id]||0, approved:acount[u.id]||0}))
+    .sort((a,b)=>(b.global_xp||0)-(a.global_xp||0));
+
+  window.__regionRows = regionRows; // for export
+
+  const regionBars = regionRows.map(r => `<div style="margin-bottom:7px">
+    <div class="flex" style="justify-content:space-between;font-size:12px;margin-bottom:3px"><span>${esc(r.region)}</span><span class="text-hint">${r.projects} проект. · ${r.users} польз.</span></div>
+    <div style="height:7px;background:var(--bg);border-radius:4px;overflow:hidden"><div style="width:${Math.round(r.projects/maxRP*100)}%;height:100%;background:#5469d4"></div></div></div>`).join('');
+
+  const talentCards = talent.length ? talent.map((u,i)=>`<div class="admin-row">
+      <div style="width:22px;text-align:center;font-weight:800;color:var(--hint)">${i+1}</div>
+      <div class="ava ava-sm">${initials(u.full_name)}</div>
+      <div style="flex:1;min-width:0">
+        <div class="fw7 text-sm">${esc(u.full_name)} <span class="lg-badge lg-${esc(u.league)}">${L().league_badges[u.league]} ${L().leagues[u.league]}</span></div>
+        <div class="text-hint" style="font-size:11px">${fmt(u.global_xp||0)} XP · ${u.projects} проект. · ${u.approved} одобр. · ${esc(u.region||'регион —')}</div>
+      </div></div>`).join('') : '<div class="text-hint text-sm" style="padding:8px 0">Пока нет Профессионалов и Новаторов</div>';
+
+  const btn = (fn,label) => `<button class="btn ghost sm" style="flex:1" onclick="${fn}">${label}</button>`;
+  body.innerHTML = `
+    <div style="padding:14px var(--pad)">
+      <div class="section-h" style="margin-top:0">📥 Отчёты для министерства</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        ${btn('exportProjectsCSV()','📄 Проекты')}
+        ${btn('exportTalentCSV()','🎖 Резерв')}
+        ${btn('exportRegionsCSV(window.__regionRows||[])','🗺 Регионы')}
+      </div>
+      <div class="text-hint" style="font-size:11px;margin-bottom:6px">CSV (Excel). На мобильном Telegram скачивание может не работать — откройте на десктопе.</div>
+
+      <div class="section-h">🗺 По регионам</div>
+      ${regionBars || '<div class="text-hint text-sm">Нет данных</div>'}
+
+      <div class="section-h">🎖 Кадровый резерв <span class="text-hint" style="font-weight:400;text-transform:none">(Профессионалы + Новаторы)</span></div>
+      ${talentCards}
+    </div>`;
 }
 
 async function renderAntifraud(body) {
