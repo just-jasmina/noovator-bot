@@ -519,6 +519,7 @@ textarea.input{resize:vertical;min-height:96px}
       <button class="tab on" id="adm-stats-tab" onclick="showAdminTab('stats')">📊 Статистика</button>
       <button class="tab" id="adm-reserve-tab" onclick="showAdminTab('reserve')">🎖 Резерв</button>
       <button class="tab" id="adm-fraud-tab" onclick="showAdminTab('fraud')">🛡 Антифрод</button>
+      <button class="tab" id="adm-news-tab" onclick="showAdminTab('news')">📰 Новости</button>
       <button class="tab" id="adm-users-tab" onclick="showAdminTab('users')">Пользователи</button>
       <button class="tab" id="adm-projs-tab" onclick="showAdminTab('projects')">Проекты</button>
     </div>
@@ -2375,12 +2376,107 @@ async function submitReview(reviewId, decision) {
 }
 
 /* ===== ADMIN ===== */
+/* ===== ADMIN: NEWS MANAGEMENT (via admin-only RPCs) ===== */
+let newsAdminCache = [];
+async function renderNewsAdmin(body) {
+  const tok = tnToken();
+  let items = [];
+  try {
+    const { data, error } = await sb.rpc('app_news_all', { p_token: tok });
+    if (error) throw error;
+    items = data || [];
+  } catch(e) { body.innerHTML = `<p class="text-hint" style="padding:20px">Ошибка: ${esc(e.message)}</p>`; return; }
+  newsAdminCache = items;
+  const rows = items.map(n => `
+    <div class="admin-row">
+      <div style="font-size:20px">${esc(n.icon||'📰')}</div>
+      <div style="flex:1;min-width:0">
+        <div class="fw7 text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(n.title)}</div>
+        <div class="text-hint" style="font-size:11px">${n.category?esc(n.category)+' · ':''}${fmtDate(n.created_at)}${n.is_pinned?' · 📌':''}${n.is_active===false?' · 🚫 скрыта':''}</div>
+      </div>
+      <button class="btn-xs" onclick='openNewsEditor(${JSON.stringify(n.id)})'>✏️</button>
+      <button class="btn-xs bx-warn" onclick='deleteNewsAdmin(${JSON.stringify(n.id)})'>🗑</button>
+    </div>`).join('');
+  body.innerHTML = `
+    <button class="btn sm" style="width:100%;margin-bottom:12px" onclick="openNewsEditor(null)">➕ Добавить новость</button>
+    ${rows || '<p class="text-hint text-sm" style="padding:12px">Новостей нет</p>'}`;
+}
+
+function openNewsEditor(id) {
+  const n = id ? (newsAdminCache.find(x=>x.id===id) || {}) : {};
+  const cats = ['Платформа','Опыт мира','Здравоохранение'];
+  openModal(`
+    <div style="font-size:17px;font-weight:800;margin-bottom:12px">${id?'✏️ Редактировать новость':'➕ Новая новость'}</div>
+    <input type="hidden" id="nw-id" value="${esc(n.id||'')}">
+    <div style="display:flex;gap:8px">
+      <div style="width:80px"><label class="text-hint" style="font-size:12px;font-weight:700">Иконка</label>
+        <input class="input" id="nw-icon" style="margin:4px 0 10px;text-align:center" value="${esc(n.icon||'📰')}"></div>
+      <div style="flex:1"><label class="text-hint" style="font-size:12px;font-weight:700">Категория</label>
+        <select class="input" id="nw-cat" style="margin:4px 0 10px">${cats.map(c=>`<option ${n.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+    </div>
+    <label class="text-hint" style="font-size:12px;font-weight:700">Заголовок (RU)</label>
+    <input class="input" id="nw-title" style="margin:4px 0 10px" value="${esc(n.title||'')}">
+    <label class="text-hint" style="font-size:12px;font-weight:700">Заголовок (UZ, необяз.)</label>
+    <input class="input" id="nw-title-uz" style="margin:4px 0 10px" value="${esc(n.title_uz||'')}">
+    <label class="text-hint" style="font-size:12px;font-weight:700">Текст (RU)</label>
+    <textarea class="input" id="nw-body" style="min-height:90px;margin:4px 0 10px">${esc(n.body||'')}</textarea>
+    <label class="text-hint" style="font-size:12px;font-weight:700">Текст (UZ, необяз.)</label>
+    <textarea class="input" id="nw-body-uz" style="min-height:90px;margin:4px 0 10px">${esc(n.body_uz||'')}</textarea>
+    <label class="text-hint" style="font-size:12px;font-weight:700">Ссылка-источник (необяз.)</label>
+    <input class="input" id="nw-link" style="margin:4px 0 12px" value="${esc(n.link_url||'')}" placeholder="https://…">
+    <label class="flex items-center gap8" style="margin-bottom:8px;font-size:14px"><input type="checkbox" id="nw-pin" ${n.is_pinned?'checked':''}> 📌 Закрепить вверху</label>
+    <label class="flex items-center gap8" style="margin-bottom:14px;font-size:14px"><input type="checkbox" id="nw-active" ${n.is_active===false?'':'checked'}> 👁 Показывать в ленте</label>
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost sm" style="flex:1" onclick="closeModal()">Отмена</button>
+      <button class="btn sm" style="flex:2" onclick="saveNewsAdmin()">💾 Сохранить</button>
+    </div>`);
+}
+
+async function saveNewsAdmin() {
+  const tok = tnToken();
+  const payload = {
+    id:       $('nw-id')?.value || '',
+    icon:     $('nw-icon')?.value.trim() || '📰',
+    category: $('nw-cat')?.value || '',
+    title:    $('nw-title')?.value.trim() || '',
+    title_uz: $('nw-title-uz')?.value.trim() || '',
+    body:     $('nw-body')?.value.trim() || '',
+    body_uz:  $('nw-body-uz')?.value.trim() || '',
+    link_url: $('nw-link')?.value.trim() || '',
+    is_pinned: !!$('nw-pin')?.checked,
+    is_active: !!$('nw-active')?.checked,
+  };
+  if (!payload.title || !payload.body) { toast('Заполните заголовок и текст (RU)'); return; }
+  try {
+    const { error } = await sb.rpc('app_news_upsert', { p_token: tok, p_news: payload });
+    if (error) throw error;
+    closeModal();
+    newsCache = null;            // invalidate the feed carousel so it refreshes
+    haptic('success');
+    toast('Новость сохранена');
+    loadAdmin('news');
+  } catch(e) { toast('Ошибка: ' + (e.message||'не удалось сохранить')); }
+}
+
+async function deleteNewsAdmin(id) {
+  if (!confirm('Удалить новость?')) return;
+  const tok = tnToken();
+  try {
+    const { error } = await sb.rpc('app_news_delete', { p_token: tok, p_id: id });
+    if (error) throw error;
+    newsCache = null;
+    toast('Удалено');
+    loadAdmin('news');
+  } catch(e) { toast('Ошибка: ' + (e.message||'не удалось удалить')); }
+}
+
 let adminTab = 'stats';
 function showAdminTab(tab) {
   adminTab = tab;
   $('adm-stats-tab')?.classList.toggle('on', tab==='stats');
   $('adm-reserve-tab')?.classList.toggle('on', tab==='reserve');
   $('adm-fraud-tab')?.classList.toggle('on', tab==='fraud');
+  $('adm-news-tab')?.classList.toggle('on', tab==='news');
   $('adm-users-tab')?.classList.toggle('on', tab==='users');
   $('adm-projs-tab')?.classList.toggle('on', tab==='projects');
   loadAdmin(tab);
@@ -2400,6 +2496,8 @@ async function loadAdmin(tab='users') {
       await renderReserve(body);
     } else if (tab === 'fraud') {
       await renderAntifraud(body);
+    } else if (tab === 'news') {
+      await renderNewsAdmin(body);
     } else if (tab === 'users') {
       const { data } = await sb.from('profiles').select('*').neq('role','admin').order('created_at',{ascending:false});
       body.innerHTML = (data||[]).map(u=>`
