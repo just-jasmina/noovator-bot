@@ -283,24 +283,24 @@ textarea.input{resize:vertical;min-height:96px}
   <div class="welcome-hero">
     <div class="welcome-logo">⚕️</div>
     <h1 class="welcome-title">Tibbiyot Novatorlari</h1>
-    <p class="welcome-sub">Платформа медицинских инноваций МЗ Узбекистана</p>
+    <p class="welcome-sub" data-i18n="welcome_sub">Платформа медицинских инноваций МЗ Узбекистана</p>
     <div class="welcome-badges">
-      <span class="w-badge">🏥 МЗ Узбекистана</span>
-      <span class="w-badge">🏆 4 лиги</span>
-      <span class="w-badge">💡 XP система</span>
+      <span class="w-badge" data-i18n="wb_moh">🏥 МЗ Узбекистана</span>
+      <span class="w-badge" data-i18n="wb_leagues">🏆 4 лиги</span>
+      <span class="w-badge" data-i18n="wb_xp">💡 XP система</span>
     </div>
 
     <div class="login-card">
-      <div style="font-size:17px;font-weight:800;margin-bottom:16px;text-align:center">Вход в систему</div>
+      <div style="font-size:17px;font-weight:800;margin-bottom:16px;text-align:center" data-i18n="login_title">Вход в систему</div>
 
       <div class="group" style="margin-bottom:12px">
-        <label class="lbl">Логин</label>
+        <label class="lbl" data-i18n="login">Логин</label>
         <input class="input" id="li-username" type="text" placeholder="your_login" autocomplete="username" oninput="clearLoginErr()">
         <div class="field-err" id="li-err"></div>
       </div>
 
       <div class="group" style="margin-bottom:16px">
-        <label class="lbl">Пароль</label>
+        <label class="lbl" data-i18n="password">Пароль</label>
         <div class="pw-wrap">
           <input class="input" id="li-password" type="password" placeholder="••••••••" autocomplete="current-password" oninput="clearLoginErr()" onkeydown="if(event.key==='Enter')doLogin()">
           <button class="pw-eye" type="button" onclick="togglePw('li-password',this)">👁</button>
@@ -309,12 +309,12 @@ textarea.input{resize:vertical;min-height:96px}
 
       <button class="btn" id="li-btn" onclick="doLogin()" style="width:100%">
         <span id="li-spin" class="spin-sm hidden"></span>
-        <span id="li-btn-txt">Войти</span>
+        <span id="li-btn-txt" data-i18n="enter">Войти</span>
       </button>
 
-      <div class="login-divider">или</div>
+      <div class="login-divider" data-i18n="or">или</div>
 
-      <button onclick="go('register')" style="width:100%;border:2px solid var(--accent);background:none;color:var(--accent);border-radius:12px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">
+      <button onclick="go('register')" data-i18n="create_account" style="width:100%;border:2px solid var(--accent);background:none;color:var(--accent);border-radius:12px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">
         Создать аккаунт →
       </button>
     </div>
@@ -324,84 +324,84 @@ textarea.input{resize:vertical;min-height:96px}
 <!-- ===== REGISTER ===== -->
 <div id="s-register" class="screen nonav">
   <div class="topbar">
-    <button class="btn-back" onclick="go('welcome')">‹ Назад</button>
-    <div class="topbar-title">Регистрация</div>
+    <button class="btn-back" onclick="go('welcome')" data-i18n="back">‹ Назад</button>
+    <div class="topbar-title" data-i18n="register_title">Регистрация</div>
   </div>
   <div class="page" style="flex:1;overflow-y:auto">
-    <p style="color:var(--hint);font-size:14px;margin-bottom:20px">Заполните данные для создания аккаунта на платформе.</p>
+    <p style="color:var(--hint);font-size:14px;margin-bottom:20px" data-i18n="reg_intro">Заполните данные для создания аккаунта на платформе.</p>
 
     <div style="background:#e8f2fb;border-radius:12px;padding:14px 16px;margin-bottom:20px">
-      <div style="font-size:13px;font-weight:800;margin-bottom:10px;color:var(--accent)">🔐 Данные для входа</div>
+      <div style="font-size:13px;font-weight:800;margin-bottom:10px;color:var(--accent)" data-i18n="login_data">🔐 Данные для входа</div>
       <div class="group" style="margin-bottom:10px">
-        <label class="lbl">Логин <span class="req">*</span></label>
+        <label class="lbl"><span data-i18n="f_login">Логин</span> <span class="req">*</span></label>
         <input class="input" id="r-username" type="text" maxlength="30" placeholder="ivan_petrov" autocomplete="username"
           oninput="this.value=this.value.replace(/[^a-zA-Z0-9_]/g,'').toLowerCase();checkRegForm()">
-        <div class="hint-text">Только латиница, цифры и _ (мин. 3 символа)</div>
-        <div class="err-msg" id="e-username">Логин занят или слишком короткий</div>
+        <div class="hint-text" data-i18n="f_login_hint">Только латиница, цифры и _ (мин. 3 символа)</div>
+        <div class="err-msg" id="e-username" data-i18n="e_username">Логин занят или слишком короткий</div>
       </div>
       <div class="group" style="margin-bottom:10px">
-        <label class="lbl">Пароль <span class="req">*</span></label>
+        <label class="lbl"><span data-i18n="f_password">Пароль</span> <span class="req">*</span></label>
         <div class="pw-wrap">
-          <input class="input" id="r-password" type="password" maxlength="64" placeholder="Минимум 8 символов" autocomplete="new-password" oninput="checkPwStrength();checkRegForm()">
+          <input class="input" id="r-password" type="password" maxlength="64" data-i18n-ph="ph_pw_min" placeholder="Минимум 8 символов" autocomplete="new-password" oninput="checkPwStrength();checkRegForm()">
           <button class="pw-eye" type="button" onclick="togglePw('r-password',this)">👁</button>
         </div>
         <div class="pw-strength" id="pw-strength-bar"></div>
-        <div class="hint-text" id="pw-strength-txt" style="margin-top:4px">Мин. 8 символов, 1 заглавная, 1 цифра</div>
+        <div class="hint-text" id="pw-strength-txt" style="margin-top:4px" data-i18n="pw_hint">Мин. 8 символов, 1 заглавная, 1 цифра</div>
       </div>
       <div class="group" style="margin-bottom:0">
-        <label class="lbl">Подтвердить пароль <span class="req">*</span></label>
+        <label class="lbl"><span data-i18n="f_password2">Подтвердить пароль</span> <span class="req">*</span></label>
         <div class="pw-wrap">
-          <input class="input" id="r-password2" type="password" maxlength="64" placeholder="Повторите пароль" autocomplete="new-password" oninput="checkRegForm()">
+          <input class="input" id="r-password2" type="password" maxlength="64" data-i18n-ph="ph_pw_repeat" placeholder="Повторите пароль" autocomplete="new-password" oninput="checkRegForm()">
           <button class="pw-eye" type="button" onclick="togglePw('r-password2',this)">👁</button>
         </div>
-        <div class="err-msg" id="e-password2">Пароли не совпадают</div>
+        <div class="err-msg" id="e-password2" data-i18n="e_password2">Пароли не совпадают</div>
       </div>
     </div>
 
     <div class="group">
-      <label class="lbl">Полное имя <span class="req">*</span></label>
+      <label class="lbl"><span data-i18n="f_name">Полное имя</span> <span class="req">*</span></label>
       <input class="input" id="r-name" type="text" placeholder="Иванов Иван Иванович" oninput="checkRegForm()">
-      <div class="err-msg" id="e-name">Введите полное имя</div>
+      <div class="err-msg" id="e-name" data-i18n="e_name">Введите полное имя</div>
     </div>
     <div class="group">
-      <label class="lbl">Номер телефона <span class="req">*</span></label>
+      <label class="lbl"><span data-i18n="f_phone">Номер телефона</span> <span class="req">*</span></label>
       <input class="input" id="r-phone" type="tel" placeholder="+998 90 123-45-67" oninput="checkRegForm()">
-      <div class="err-msg" id="e-phone">Введите корректный номер</div>
+      <div class="err-msg" id="e-phone" data-i18n="e_phone">Введите корректный номер</div>
     </div>
     <div class="group">
-      <label class="lbl">ПИНФЛ <span style="color:var(--hint);font-weight:400">(рекомендуется)</span></label>
-      <input class="input" id="r-pnfl" type="text" maxlength="14" placeholder="14 цифр" oninput="checkRegForm()">
-      <div class="hint-text">Уникальный идентификатор личности Узбекистана</div>
-      <div class="err-msg" id="e-pnfl">ПИНФЛ должен содержать 14 цифр</div>
+      <label class="lbl"><span data-i18n="f_pnfl">ПИНФЛ</span> <span style="color:var(--hint);font-weight:400" data-i18n="req_recommended">(рекомендуется)</span></label>
+      <input class="input" id="r-pnfl" type="text" maxlength="14" data-i18n-ph="ph_pnfl14" placeholder="14 цифр" oninput="checkRegForm()">
+      <div class="hint-text" data-i18n="pnfl_hint">Уникальный идентификатор личности Узбекистана</div>
+      <div class="err-msg" id="e-pnfl" data-i18n="e_pnfl">ПИНФЛ должен содержать 14 цифр</div>
     </div>
     <div class="group">
-      <label class="lbl">Деятельность <span class="req">*</span></label>
+      <label class="lbl"><span data-i18n="f_activity">Деятельность</span> <span class="req">*</span></label>
       <div id="r-occupation"></div>
-      <div class="err-msg" id="e-occ">Выберите вариант</div>
+      <div class="err-msg" id="e-occ" data-i18n="e_occ">Выберите вариант</div>
     </div>
     <div class="group">
-      <label class="lbl">Регион</label>
+      <label class="lbl" data-i18n="f_region">Регион</label>
       <select class="input" id="r-region" onchange="onRegionChange()"></select>
     </div>
     <div class="group" id="r-university-wrap" style="display:none">
-      <label class="lbl">Где учитесь (ВУЗ / колледж)</label>
+      <label class="lbl" data-i18n="f_university">Где учитесь (ВУЗ / колледж)</label>
       <select class="input" id="r-university" onchange="checkRegForm()"></select>
-      <div class="hint-text" style="margin-top:4px">Сначала выберите регион</div>
+      <div class="hint-text" style="margin-top:4px" data-i18n="university_hint">Сначала выберите регион</div>
     </div>
     <div class="group" id="r-workplace-wrap" style="display:none">
-      <label class="lbl" id="r-workplace-lbl">Место работы</label>
-      <input class="input" id="r-workplace" type="text" placeholder="Название организации" oninput="checkRegForm()">
+      <label class="lbl" id="r-workplace-lbl" data-i18n="f_workplace">Место работы</label>
+      <input class="input" id="r-workplace" type="text" data-i18n-ph="ph_org" placeholder="Название организации" oninput="checkRegForm()">
     </div>
     <div class="group">
-      <label class="lbl">Специализация (теги)</label>
-      <div class="hint-text" style="margin-bottom:8px">Выберите до 3 направлений для экспертизы</div>
+      <label class="lbl" data-i18n="f_tags">Специализация (теги)</label>
+      <div class="hint-text" style="margin-bottom:8px" data-i18n="tags_hint">Выберите до 3 направлений для экспертизы</div>
       <div class="flex" style="flex-wrap:wrap;gap:8px" id="r-tags"></div>
     </div>
   </div>
   <div class="action-bar" style="padding-bottom:calc(16px + env(safe-area-inset-bottom))">
     <button class="btn" id="r-btn" onclick="doRegister()" disabled>
       <span id="r-spin" class="spin-sm hidden"></span>
-      <span id="r-btn-txt">Зарегистрироваться</span>
+      <span id="r-btn-txt" data-i18n="register_btn">Зарегистрироваться</span>
     </button>
   </div>
 </div>
@@ -418,13 +418,13 @@ textarea.input{resize:vertical;min-height:96px}
     </div>
   </div>
   <div id="feed-news"></div>
-  <div style="padding:0 var(--pad) 8px"><input class="input" id="feed-search" placeholder="🔎 Поиск по названию или описанию…" oninput="onFeedSearch(this.value)"></div>
+  <div style="padding:0 var(--pad) 8px"><input class="input" id="feed-search" data-i18n-ph="ph_search" placeholder="🔎 Поиск по названию или описанию…" oninput="onFeedSearch(this.value)"></div>
   <div class="scroll-x" id="feed-tags" style="padding-bottom:8px"></div>
   <div class="scroll-x" id="feed-status" style="padding-bottom:8px"></div>
   <div style="padding:0 var(--pad) 10px">
     <div class="tabs">
-      <button class="tab on" id="sort-new" onclick="setFeedSort('newest')">🕐 Новые</button>
-      <button class="tab" id="sort-pop" onclick="setFeedSort('popular')">🔥 Популярные</button>
+      <button class="tab on" id="sort-new" onclick="setFeedSort('newest')" data-i18n="sort_new">🕐 Новые</button>
+      <button class="tab" id="sort-pop" onclick="setFeedSort('popular')" data-i18n="sort_pop">🔥 Популярные</button>
     </div>
   </div>
   <div id="feed-list" style="padding:0 var(--pad);flex:1"></div>
@@ -433,7 +433,7 @@ textarea.input{resize:vertical;min-height:96px}
 <!-- ===== NEWS ===== -->
 <div id="s-news" class="screen">
   <div class="topbar">
-    <div class="topbar-title">📰 <span id="news-title-lbl">Новости</span></div>
+    <div class="topbar-title">📰 <span id="news-title-lbl" data-i18n="news_title">Новости</span></div>
     <div class="lang-sw">
       <button id="btn-ru2" class="on" onclick="setLang('ru')">RU</button>
       <button id="btn-uz2" onclick="setLang('uz')">UZ</button>
@@ -445,8 +445,8 @@ textarea.input{resize:vertical;min-height:96px}
 <!-- ===== SUBMIT ===== -->
 <div id="s-submit" class="screen">
   <div class="topbar">
-    <button class="btn-back" id="submit-back-btn" onclick="submitBack()">‹ Назад</button>
-    <div class="topbar-title" id="submit-top-title">Новый проект</div>
+    <button class="btn-back" id="submit-back-btn" onclick="submitBack()" data-i18n="back">‹ Назад</button>
+    <div class="topbar-title" id="submit-top-title" data-i18n="new_project">Новый проект</div>
   </div>
   <div class="page" style="flex:1;overflow-y:auto" id="submit-body">
     <!-- injected by JS -->
@@ -454,7 +454,7 @@ textarea.input{resize:vertical;min-height:96px}
   <div class="action-bar" id="submit-action">
     <button class="btn" id="submit-btn" onclick="submitNext()" disabled>
       <span id="submit-spin" class="spin-sm hidden"></span>
-      <span id="submit-btn-txt">Далее</span>
+      <span id="submit-btn-txt" data-i18n="next">Далее</span>
     </button>
   </div>
 </div>
@@ -462,8 +462,8 @@ textarea.input{resize:vertical;min-height:96px}
 <!-- ===== PROJECT DETAIL ===== -->
 <div id="s-project" class="screen">
   <div class="topbar">
-    <button class="btn-back" onclick="go('feed')">‹ Лента</button>
-    <div class="topbar-title" id="proj-top-title">Проект</div>
+    <button class="btn-back" onclick="go('feed')" data-i18n="nav_feed">Лента</button>
+    <div class="topbar-title" id="proj-top-title" data-i18n="project">Проект</div>
   </div>
   <div id="proj-body" style="flex:1;overflow-y:auto;padding:var(--pad)"></div>
 </div>
@@ -471,12 +471,12 @@ textarea.input{resize:vertical;min-height:96px}
 <!-- ===== LEADERBOARD ===== -->
 <div id="s-leaderboard" class="screen">
   <div class="topbar">
-    <div class="topbar-title" id="lb-title">🏆 Рейтинг</div>
+    <div class="topbar-title" id="lb-title" data-i18n="lb_title">🏆 Рейтинг</div>
   </div>
   <div style="padding:12px var(--pad) 0">
     <div class="tabs">
-      <button class="tab on" id="lb-season-tab" onclick="loadLeaderboard('season')">Сезон</button>
-      <button class="tab" id="lb-global-tab" onclick="loadLeaderboard('global')">Всё время</button>
+      <button class="tab on" id="lb-season-tab" onclick="loadLeaderboard('season')" data-i18n="season">Сезон</button>
+      <button class="tab" id="lb-global-tab" onclick="loadLeaderboard('global')" data-i18n="all_time">Всё время</button>
     </div>
   </div>
   <div id="lb-podium" class="podium"></div>
@@ -486,8 +486,8 @@ textarea.input{resize:vertical;min-height:96px}
 <!-- ===== PROFILE ===== -->
 <div id="s-profile" class="screen">
   <div class="topbar">
-    <div class="topbar-title">👤 Профиль</div>
-    <button class="btn-icon" onclick="logout()" title="Выйти">🚪</button>
+    <div class="topbar-title" data-i18n="profile_title">👤 Профиль</div>
+    <button class="btn-icon" onclick="logout()" data-i18n-title="logout_title" title="Выйти">🚪</button>
   </div>
   <div id="profile-body" style="flex:1;overflow-y:auto;padding:var(--pad)"></div>
 </div>
@@ -495,13 +495,13 @@ textarea.input{resize:vertical;min-height:96px}
 <!-- ===== EXPERT REVIEW ===== -->
 <div id="s-review" class="screen">
   <div class="topbar">
-    <button class="btn-back" onclick="go('feed')">‹ Назад</button>
-    <div class="topbar-title">🔍 Экспертиза</div>
+    <button class="btn-back" onclick="go('feed')" data-i18n="back">‹ Назад</button>
+    <div class="topbar-title" data-i18n="review_title">🔍 Экспертиза</div>
   </div>
   <div style="padding:12px var(--pad) 0">
     <div class="tabs">
-      <button class="tab on" id="rev-queue-tab" onclick="showReviewTab('queue')">📋 Очередь</button>
-      <button class="tab" id="rev-hist-tab" onclick="showReviewTab('history')">✅ История</button>
+      <button class="tab on" id="rev-queue-tab" onclick="showReviewTab('queue')" data-i18n="rev_queue">📋 Очередь</button>
+      <button class="tab" id="rev-hist-tab" onclick="showReviewTab('history')" data-i18n="rev_history">✅ История</button>
     </div>
   </div>
   <div id="review-body" style="flex:1;overflow-y:auto;padding:var(--pad)"></div>
@@ -510,8 +510,8 @@ textarea.input{resize:vertical;min-height:96px}
 <!-- ===== INCUBATOR ===== -->
 <div id="s-incubator" class="screen">
   <div class="topbar">
-    <button class="btn-back" onclick="go('profile')">‹ Назад</button>
-    <div class="topbar-title">🤝 Инкубатор</div>
+    <button class="btn-back" onclick="go('profile')" data-i18n="back">‹ Назад</button>
+    <div class="topbar-title" data-i18n="incubator_title">🤝 Инкубатор</div>
   </div>
   <div id="incubator-body" style="flex:1;overflow-y:auto;padding:var(--pad)"></div>
 </div>
@@ -519,9 +519,9 @@ textarea.input{resize:vertical;min-height:96px}
 <!-- ===== NOTIFICATIONS ===== -->
 <div id="s-notif" class="screen">
   <div class="topbar">
-    <button class="btn-back" onclick="go('feed')">‹ Назад</button>
-    <div class="topbar-title">🔔 Уведомления</div>
-    <button onclick="markAllNotifRead()" style="border:none;background:none;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;padding:4px 8px">Прочитать всё</button>
+    <button class="btn-back" onclick="go('feed')" data-i18n="back">‹ Назад</button>
+    <div class="topbar-title" data-i18n="notif_title">🔔 Уведомления</div>
+    <button onclick="markAllNotifRead()" data-i18n="mark_all_read" style="border:none;background:none;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;padding:4px 8px">Прочитать всё</button>
   </div>
   <div id="notif-body" style="flex:1;overflow-y:auto;padding:var(--pad)"></div>
 </div>
@@ -529,17 +529,17 @@ textarea.input{resize:vertical;min-height:96px}
 <!-- ===== ADMIN ===== -->
 <div id="s-admin" class="screen">
   <div class="topbar">
-    <button class="btn-back" onclick="go('feed')">‹ Назад</button>
-    <div class="topbar-title">⚙️ Администратор</div>
+    <button class="btn-back" onclick="go('feed')" data-i18n="back">‹ Назад</button>
+    <div class="topbar-title" data-i18n="admin_title">⚙️ Администратор</div>
   </div>
   <div style="padding:12px var(--pad) 0">
     <div class="tabs">
-      <button class="tab on" id="adm-stats-tab" onclick="showAdminTab('stats')">📊 Статистика</button>
-      <button class="tab" id="adm-reserve-tab" onclick="showAdminTab('reserve')">🎖 Резерв</button>
-      <button class="tab" id="adm-fraud-tab" onclick="showAdminTab('fraud')">🛡 Антифрод</button>
-      <button class="tab" id="adm-news-tab" onclick="showAdminTab('news')">📰 Новости</button>
-      <button class="tab" id="adm-users-tab" onclick="showAdminTab('users')">Пользователи</button>
-      <button class="tab" id="adm-projs-tab" onclick="showAdminTab('projects')">Проекты</button>
+      <button class="tab on" id="adm-stats-tab" onclick="showAdminTab('stats')" data-i18n="adm_stats">📊 Статистика</button>
+      <button class="tab" id="adm-reserve-tab" onclick="showAdminTab('reserve')" data-i18n="adm_reserve">🎖 Резерв</button>
+      <button class="tab" id="adm-fraud-tab" onclick="showAdminTab('fraud')" data-i18n="adm_fraud">🛡 Антифрод</button>
+      <button class="tab" id="adm-news-tab" onclick="showAdminTab('news')" data-i18n="adm_news">📰 Новости</button>
+      <button class="tab" id="adm-users-tab" onclick="showAdminTab('users')" data-i18n="adm_users">Пользователи</button>
+      <button class="tab" id="adm-projs-tab" onclick="showAdminTab('projects')" data-i18n="adm_projects">Проекты</button>
     </div>
   </div>
   <div id="admin-body" style="flex:1;overflow-y:auto"></div>
@@ -547,12 +547,12 @@ textarea.input{resize:vertical;min-height:96px}
 
 <!-- ===== BOTTOM NAV ===== -->
 <nav id="nav" class="hidden">
-  <button id="nav-feed" class="on" onclick="go('feed')"><span class="ic">🔭</span><span id="nl-feed">Лента</span></button>
-  <button id="nav-news" onclick="go('news')"><span class="ic">📰</span><span id="nl-news">Новости</span></button>
-  <button id="nav-submit" onclick="go('submit')"><span class="ic">➕</span><span id="nl-submit">Проект</span></button>
-  <button id="nav-lb" onclick="go('leaderboard')"><span class="ic">🏆</span><span id="nl-lb">Рейтинг</span></button>
-  <button id="nav-notif" onclick="go('notif')"><span class="ic" style="position:relative">🔔<span id="notif-badge" class="notif-dot hidden"></span></span><span id="nl-notif">Уведомл.</span></button>
-  <button id="nav-profile" onclick="go('profile')"><span class="ic">👤</span><span id="nl-profile">Я</span></button>
+  <button id="nav-feed" class="on" onclick="go('feed')"><span class="ic">🔭</span><span id="nl-feed" data-i18n="nav_feed">Лента</span></button>
+  <button id="nav-news" onclick="go('news')"><span class="ic">📰</span><span id="nl-news" data-i18n="nav_news">Новости</span></button>
+  <button id="nav-submit" onclick="go('submit')"><span class="ic">➕</span><span id="nl-submit" data-i18n="nav_submit">Проект</span></button>
+  <button id="nav-lb" onclick="go('leaderboard')"><span class="ic">🏆</span><span id="nl-lb" data-i18n="nav_lb">Рейтинг</span></button>
+  <button id="nav-notif" onclick="go('notif')"><span class="ic" style="position:relative">🔔<span id="notif-badge" class="notif-dot hidden"></span></span><span id="nl-notif" data-i18n="nav_notif">Уведомл.</span></button>
+  <button id="nav-profile" onclick="go('profile')"><span class="ic">👤</span><span id="nl-profile" data-i18n="nav_profile">Я</span></button>
 </nav>
 
 <button id="fab" onclick="go('submit')" title="Новый проект">＋</button>
@@ -647,6 +647,95 @@ const I18N = {
 };
 let LANG = 'ru';
 const L = () => I18N[LANG];
+
+/* ===== UI STRINGS (full interface i18n) ===== */
+const TT = {
+  ru: {
+    // welcome / login
+    welcome_sub:'Платформа медицинских инноваций МЗ Узбекистана',
+    wb_moh:'🏥 МЗ Узбекистана', wb_leagues:'🏆 4 лиги', wb_xp:'💡 XP система',
+    login_title:'Вход в систему', login:'Логин', password:'Пароль', enter:'Войти',
+    or:'или', create_account:'Создать аккаунт →', back:'‹ Назад',
+    // register
+    register_title:'Регистрация', reg_intro:'Заполните данные для создания аккаунта на платформе.',
+    login_data:'🔐 Данные для входа', f_login:'Логин', f_login_hint:'Только латиница, цифры и _ (мин. 3 символа)',
+    e_username:'Логин занят или слишком короткий', f_password:'Пароль', ph_pw_min:'Минимум 8 символов',
+    pw_hint:'Мин. 8 символов, 1 заглавная, 1 цифра', f_password2:'Подтвердить пароль', ph_pw_repeat:'Повторите пароль',
+    e_password2:'Пароли не совпадают', f_name:'Полное имя', e_name:'Введите полное имя', f_phone:'Номер телефона',
+    e_phone:'Введите корректный номер', f_pnfl:'ПИНФЛ', pnfl_rec:'(рекомендуется)', ph_pnfl14:'14 цифр',
+    pnfl_hint:'Уникальный идентификатор личности Узбекистана', e_pnfl:'ПИНФЛ должен содержать 14 цифр',
+    f_activity:'Деятельность', e_occ:'Выберите вариант', f_region:'Регион', region_none:'— Регион не указан —',
+    f_university:'Где учитесь (ВУЗ / колледж)', university_hint:'Сначала выберите регион', f_workplace:'Место работы',
+    ph_org:'Название организации', f_tags:'Специализация (теги)', tags_hint:'Выберите до 3 направлений для экспертизы',
+    register_btn:'Зарегистрироваться', req_recommended:'(рекомендуется)',
+    // feed / nav / common
+    ph_search:'🔎 Поиск по названию или описанию…', sort_new:'🕐 Новые', sort_pop:'🔥 Популярные',
+    news_title:'Новости', new_project:'Новый проект', next:'Далее', project:'Проект',
+    lb_title:'🏆 Рейтинг', lb_title_expert:'🔬 Рейтинг экспертов', season:'Сезон', all_time:'Всё время', profile_title:'👤 Профиль', logout_title:'Выйти',
+    review_title:'🔍 Экспертиза', rev_queue:'📋 Очередь', rev_history:'✅ История',
+    incubator_title:'🤝 Инкубатор', notif_title:'🔔 Уведомления', mark_all_read:'Прочитать всё',
+    admin_title:'⚙️ Администратор', adm_stats:'📊 Статистика', adm_reserve:'🎖 Резерв', adm_fraud:'🛡 Антифрод',
+    adm_news:'📰 Новости', adm_users:'Пользователи', adm_projects:'Проекты',
+    nav_feed:'Лента', nav_news:'Новости', nav_submit:'Проект', nav_lb:'Рейтинг', nav_notif:'Уведомл.', nav_profile:'Я',
+    feed_brand_news:'📰 Новости и мировой опыт', read_more:'🔗 Подробнее', close:'Закрыть', cancel:'Отмена',
+    no_projects_title:'Лента пока пустая', no_projects_sub:'Выше — новости и мировой опыт. Станьте первым — отправьте свою инновацию!',
+    submit_project:'➕ Подать проект', no_news:'Пока нет новостей',
+    // project detail / comments / profile / review
+    sec_brief:'КРАТКО', sec_problem:'ПРОБЛЕМА', sec_solution:'РЕШЕНИЕ', sec_audience:'АУДИТОРИЯ',
+    sec_resources:'РЕСУРСЫ', sec_kpi:'KPI', comments:'Комментарии', comments_word:'комментариев',
+    ph_comment:'Напишите конструктивный комментарий (мин. 50 символов для +5 XP)…', send:'Отправить',
+    login_to_comment:'Войдите, чтобы комментировать', login_account:'Войдите в аккаунт',
+    login_to_like:'Войдите, чтобы ставить лайки', no_comments:'Пока нет комментариев',
+    comment_added_xp:'Комментарий добавлен! +5 XP 🎉', comment_added:'Комментарий добавлен!',
+    my_projects:'Мои проекты', experts_only:'Только для экспертов', review_queue_btn:'🔍 Очередь на экспертизу',
+    send_to_review:'Отправить на экспертизу', next_arrow:'Далее →', no_my_projects:'Вы ещё не подавали проекты',
+    experts_only_hint:'Обратитесь к администратору для получения роли эксперта.',
+  },
+  uz: {
+    welcome_sub:"O'zbekiston SSV tibbiy innovatsiyalar platformasi",
+    wb_moh:"🏥 O'zbekiston SSV", wb_leagues:'🏆 4 liga', wb_xp:'💡 XP tizimi',
+    login_title:'Tizimga kirish', login:'Login', password:'Parol', enter:'Kirish',
+    or:'yoki', create_account:'Hisob yaratish →', back:'‹ Orqaga',
+    register_title:"Ro'yxatdan o'tish", reg_intro:"Platformada hisob yaratish uchun ma'lumotlarni to'ldiring.",
+    login_data:"🔐 Kirish ma'lumotlari", f_login:'Login', f_login_hint:'Faqat lotin, raqam va _ (kamida 3 belgi)',
+    e_username:'Login band yoki juda qisqa', f_password:'Parol', ph_pw_min:'Kamida 8 belgi',
+    pw_hint:'Kamida 8 belgi, 1 bosh harf, 1 raqam', f_password2:'Parolni tasdiqlang', ph_pw_repeat:'Parolni takrorlang',
+    e_password2:'Parollar mos kelmadi', f_name:"To'liq ism", e_name:"To'liq ismni kiriting", f_phone:'Telefon raqami',
+    e_phone:"To'g'ri raqam kiriting", f_pnfl:'JSHSHIR', pnfl_rec:'(tavsiya etiladi)', ph_pnfl14:'14 raqam',
+    pnfl_hint:"O'zbekiston shaxsiy identifikatori", e_pnfl:'JSHSHIR 14 raqamdan iborat bo‘lishi kerak',
+    f_activity:'Faoliyat', e_occ:'Variantni tanlang', f_region:'Hudud', region_none:'— Hudud ko‘rsatilmagan —',
+    f_university:"Qayerda o'qiysiz (OTM / kollej)", university_hint:'Avval hududni tanlang', f_workplace:'Ish joyi',
+    ph_org:'Tashkilot nomi', f_tags:'Mutaxassislik (teglar)', tags_hint:'Ekspertiza uchun 3 tagacha yo‘nalish tanlang',
+    register_btn:"Ro'yxatdan o'tish", req_recommended:'(tavsiya etiladi)',
+    ph_search:'🔎 Nom yoki tavsif bo‘yicha qidirish…', sort_new:'🕐 Yangi', sort_pop:'🔥 Mashhur',
+    news_title:'Yangiliklar', new_project:'Yangi loyiha', next:'Keyingi', project:'Loyiha',
+    lb_title:'🏆 Reyting', lb_title_expert:'🔬 Ekspertlar reytingi', season:'Mavsum', all_time:'Hammavaqt', profile_title:'👤 Profil', logout_title:'Chiqish',
+    review_title:'🔍 Ekspertiza', rev_queue:'📋 Navbat', rev_history:'✅ Tarix',
+    incubator_title:'🤝 Inkubator', notif_title:'🔔 Bildirishnomalar', mark_all_read:'Hammasini o‘qish',
+    admin_title:'⚙️ Administrator', adm_stats:'📊 Statistika', adm_reserve:'🎖 Zaxira', adm_fraud:'🛡 Antifrod',
+    adm_news:'📰 Yangiliklar', adm_users:'Foydalanuvchilar', adm_projects:'Loyihalar',
+    nav_feed:'Lenta', nav_news:'Yangiliklar', nav_submit:'Loyiha', nav_lb:'Reyting', nav_notif:'Bildirish.', nav_profile:'Men',
+    feed_brand_news:'📰 Yangiliklar va jahon tajribasi', read_more:'🔗 Batafsil', close:'Yopish', cancel:'Bekor qilish',
+    no_projects_title:'Lenta hozircha bo‘sh', no_projects_sub:'Yuqorida — yangiliklar va jahon tajribasi. Birinchi bo‘ling — innovatsiyangizni yuboring!',
+    submit_project:'➕ Loyiha yuborish', no_news:'Hozircha yangiliklar yo‘q',
+    sec_brief:'QISQACHA', sec_problem:'MUAMMO', sec_solution:'YECHIM', sec_audience:'AUDITORIYA',
+    sec_resources:'RESURSLAR', sec_kpi:'KPI', comments:'Izohlar', comments_word:'izoh',
+    ph_comment:'Konstruktiv izoh yozing (kamida 50 belgi, +5 XP)…', send:'Yuborish',
+    login_to_comment:'Izoh qoldirish uchun kiring', login_account:'Hisobingizga kiring',
+    login_to_like:'Layk bosish uchun kiring', no_comments:'Hozircha izohlar yo‘q',
+    comment_added_xp:'Izoh qo‘shildi! +5 XP 🎉', comment_added:'Izoh qo‘shildi!',
+    my_projects:'Mening loyihalarim', experts_only:'Faqat ekspertlar uchun', review_queue_btn:'🔍 Ekspertiza navbati',
+    send_to_review:'Ekspertizaga yuborish', next_arrow:'Keyingi →', no_my_projects:'Siz hali loyiha yubormagansiz',
+    experts_only_hint:'Ekspert rolini olish uchun administratorga murojaat qiling.',
+  }
+};
+function t(k){ const d=TT[LANG]||TT.ru; return d[k]!=null ? d[k] : (TT.ru[k]!=null?TT.ru[k]:k); }
+function applyI18n(root){
+  const r = root || document;
+  r.querySelectorAll('[data-i18n]').forEach(el=>{ const v=t(el.getAttribute('data-i18n')); if(v!=null) el.textContent=v; });
+  r.querySelectorAll('[data-i18n-ph]').forEach(el=>{ const v=t(el.getAttribute('data-i18n-ph')); if(v!=null) el.setAttribute('placeholder',v); });
+  r.querySelectorAll('[data-i18n-title]').forEach(el=>{ const v=t(el.getAttribute('data-i18n-title')); if(v!=null) el.setAttribute('title',v); });
+}
 
 /* ---- Canonical tag routing (must match profiles.expert_tags in Supabase) ----
    The UI shows localized tag labels (RU/UZ), but experts store CANONICAL tags.
@@ -754,15 +843,27 @@ function setLang(l) {
   LANG = l;
   ['btn-ru','btn-ru2'].forEach(id=>document.getElementById(id)?.classList.toggle('on', l === 'ru'));
   ['btn-uz','btn-uz2'].forEach(id=>document.getElementById(id)?.classList.toggle('on', l === 'uz'));
-  const nav = ['feed','submit','lb','profile'];
-  const keys = ['feed','submit','leaderboard','profile'];
-  nav.forEach((n,i) => { const el = document.getElementById('nl-' + n); if(el) el.textContent = L()[keys[i]] || L().feed; });
-  const nlNews = document.getElementById('nl-news'); if (nlNews) nlNews.textContent = (l==='uz'?'Yangiliklar':'Новости');
-  const newsLbl = document.getElementById('news-title-lbl'); if (newsLbl) newsLbl.textContent = (l==='uz'?'Yangiliklar':'Новости');
-  if (CS === 'feed') loadFeed();
-  if (CS === 'news') loadNewsScreen();
-  if (CS === 'leaderboard') loadLeaderboard(lbType);
-  if (CS === 'profile') loadProfile();
+  applyI18n();        // all static [data-i18n] text / placeholders / titles
+  refreshScreen();    // re-render the active dynamic screen in the new language
+}
+
+// Re-render whatever screen is open so its JS-generated content switches language.
+function refreshScreen() {
+  try {
+    switch (CS) {
+      case 'feed':        loadFeed(); break;
+      case 'news':        loadNewsScreen(); break;
+      case 'leaderboard': loadLeaderboard(lbType); break;
+      case 'profile':     loadProfile(); break;
+      case 'review':      loadReviews(); break;
+      case 'notif':       loadNotifications(); break;
+      case 'incubator':   loadIncubator(); break;
+      case 'admin':       loadAdmin(adminTab); break;
+      case 'submit':      renderSubmitStep(); break;
+      case 'register':    buildRegForm(); break;
+      case 'project':     if (currentProjId) openProject(currentProjId); break;
+    }
+  } catch(_) {}
 }
 
 /* ===== CONSTANTS ===== */
@@ -1192,7 +1293,7 @@ function subscribeNotifications() {
 async function loadNotifications() {
   const body = $('notif-body');
   if (!body) return;
-  if (!CU || !sbOk()) { body.innerHTML = '<div class="empty"><div class="empty-ic">🔒</div><div class="empty-title">Войдите в аккаунт</div></div>'; return; }
+  if (!CU || !sbOk()) { body.innerHTML = `<div class="empty"><div class="empty-ic">🔒</div><div class="empty-title">${t('login_account')}</div></div>`; return; }
   body.innerHTML = '<div class="spinner"></div>';
   try {
     const { data } = await sb.from('notifications').select('*').eq('user_id', CU.id).order('created_at', {ascending: false}).limit(50);
@@ -1470,21 +1571,21 @@ async function openProject(id) {
       ${canMentor ? `<button class="btn sm" style="width:100%;margin-bottom:14px;background:#7c3aed" onclick="becomeMentor('${esc(id)}','${esc(p.user_id)}')">🤝 Стать ментором проекта</button>` : ''}
       ${mtr ? `<div class="card-simple" style="margin-bottom:14px;padding:10px 12px;border-left:3px solid #7c3aed"><span style="font-size:12px;color:#7c3aed;font-weight:600">🤝 У проекта есть ментор (Инкубатор)</span></div>` : ''}
       <div class="card-simple">
-        <div style="font-size:13px;font-weight:700;color:var(--hint);margin-bottom:6px">КРАТКО</div>
+        <div style="font-size:13px;font-weight:700;color:var(--hint);margin-bottom:6px">${t('sec_brief')}</div>
         <p style="font-size:14px;line-height:1.6">${esc(p.pitch)}</p>
       </div>
       <div class="card-simple">
-        <div style="font-size:13px;font-weight:700;color:var(--hint);margin-bottom:6px">ПРОБЛЕМА</div>
+        <div style="font-size:13px;font-weight:700;color:var(--hint);margin-bottom:6px">${t('sec_problem')}</div>
         <p style="font-size:14px;line-height:1.6">${esc(p.problem)}</p>
       </div>
       <div class="card-simple">
-        <div style="font-size:13px;font-weight:700;color:var(--hint);margin-bottom:6px">РЕШЕНИЕ</div>
+        <div style="font-size:13px;font-weight:700;color:var(--hint);margin-bottom:6px">${t('sec_solution')}</div>
         <p style="font-size:14px;line-height:1.6">${esc(p.solution)}</p>
       </div>
-      ${kpis ? `<div class="card-simple"><div style="font-size:13px;font-weight:700;color:var(--hint);margin-bottom:8px">KPI</div><ul style="padding-left:18px;font-size:14px;line-height:1.6">${kpis}</ul></div>` : ''}
-      ${aud ? `<div class="card-simple"><div style="font-size:13px;font-weight:700;color:var(--hint);margin-bottom:6px">АУДИТОРИЯ</div><p style="font-size:14px">${esc(aud)}</p></div>` : ''}
+      ${kpis ? `<div class="card-simple"><div style="font-size:13px;font-weight:700;color:var(--hint);margin-bottom:8px">${t('sec_kpi')}</div><ul style="padding-left:18px;font-size:14px;line-height:1.6">${kpis}</ul></div>` : ''}
+      ${aud ? `<div class="card-simple"><div style="font-size:13px;font-weight:700;color:var(--hint);margin-bottom:6px">${t('sec_audience')}</div><p style="font-size:14px">${esc(aud)}</p></div>` : ''}
       <div class="card-simple">
-        <div style="font-size:13px;font-weight:700;color:var(--hint);margin-bottom:6px">РЕСУРСЫ</div>
+        <div style="font-size:13px;font-weight:700;color:var(--hint);margin-bottom:6px">${t('sec_resources')}</div>
         <p style="font-size:14px">${esc(p.cost_range||'')} • ${esc(p.timeline||'')}</p>
         ${p.budget_use ? `<p style="font-size:14px;margin-top:6px;line-height:1.5">${esc(p.budget_use)}</p>` : ''}
       </div>
@@ -1492,14 +1593,14 @@ async function openProject(id) {
         <button class="like-btn${isLiked?' liked':''}" id="like-btn" onclick="toggleLike('${esc(id)}')">
           ${isLiked?'❤️':'🤍'} <span id="like-count">${fmt(p.likes_count||0)}</span>
         </button>
-        <span style="font-size:13px;color:var(--hint)">💬 ${fmt(p.comments_count||0)} комментариев</span>
+        <span style="font-size:13px;color:var(--hint)">💬 ${fmt(p.comments_count||0)} ${t('comments_word')}</span>
       </div>
-      <div class="section-h">Комментарии</div>
+      <div class="section-h">${t('comments')}</div>
       ${CU ? `
       <div style="margin-bottom:16px">
-        <textarea class="input" id="comment-input" placeholder="Напишите конструктивный комментарий (мин. 50 символов для +5 XP)…" style="min-height:80px"></textarea>
-        <button class="btn sm" style="margin-top:8px" onclick="addComment('${esc(id)}')">Отправить</button>
-      </div>` : '<p class="text-hint text-sm" style="margin-bottom:16px">Войдите, чтобы комментировать</p>'}
+        <textarea class="input" id="comment-input" placeholder="${t('ph_comment')}" style="min-height:80px"></textarea>
+        <button class="btn sm" style="margin-top:8px" onclick="addComment('${esc(id)}')">${t('send')}</button>
+      </div>` : `<p class="text-hint text-sm" style="margin-bottom:16px">${t('login_to_comment')}</p>`}
       <div id="comments-list"></div>`;
     loadComments(id);
     subscribeComments(id);
@@ -1516,7 +1617,7 @@ function subscribeComments(projId) {
 }
 
 async function toggleLike(projId) {
-  if (!CU) { toast('Войдите, чтобы ставить лайки'); return; }
+  if (!CU) { toast(t('login_to_like')); return; }
   const btn = $('like-btn');
   const isLiked = btn?.classList.contains('liked');
   if (isLiked) {
@@ -1543,7 +1644,7 @@ async function loadComments(projId) {
       .eq('project_id', projId)
       .order('created_at', {ascending: true})
       .limit(100);
-    if (!data?.length) { box.innerHTML = '<p class="text-hint text-sm" style="text-align:center;padding:16px">Пока нет комментариев</p>'; return; }
+    if (!data?.length) { box.innerHTML = `<p class="text-hint text-sm" style="text-align:center;padding:16px">${t('no_comments')}</p>`; return; }
 
     // Separate top-level and replies
     const topLevel = data.filter(c => !c.parent_id);
@@ -1591,7 +1692,7 @@ function toggleReplyBox(commentId, projId) {
 }
 
 async function addReply(parentId, projId) {
-  if (!CU) { toast('Войдите в аккаунт'); return; }
+  if (!CU) { toast(t('login_account')); return; }
   const ta = document.getElementById('reply-ta-' + parentId);
   const text = ta?.value.trim();
   if (!text || text.length < 5) { toast('Напишите хотя бы 5 символов'); return; }
@@ -1616,7 +1717,7 @@ async function addReply(parentId, projId) {
 }
 
 async function addComment(projId) {
-  if (!CU) { toast('Войдите в аккаунт'); return; }
+  if (!CU) { toast(t('login_account')); return; }
   const inp = $('comment-input');
   const text = inp?.value.trim();
   if (!text || text.length < 10) { toast('Напишите хотя бы 10 символов'); return; }
@@ -1627,8 +1728,8 @@ async function addComment(projId) {
     inp.value = '';
     if (text.length >= 50) {
       await awardXP('comment', L().xp_comment, '💬');
-      toast('Комментарий добавлен! +5 XP 🎉');
-    } else { toast('Комментарий добавлен!'); }
+      toast(t('comment_added_xp'));
+    } else { toast(t('comment_added')); }
     loadComments(projId);
     haptic('success');
   } catch(e) { toast('Ошибка: ' + e.message); }
@@ -1782,7 +1883,7 @@ function renderSubmitStep() {
   const s = SF.step;
   const body = $('submit-body');
   const dots = Array.from({length:5},(_,i)=>`<div class="step-dot${i<s?' done':i===s?' cur':''}"></div>`).join('');
-  const btnTxt = s===4 ? 'Отправить на экспертизу' : 'Далее →';
+  const btnTxt = s===4 ? t('send_to_review') : t('next_arrow');
   $('submit-btn-txt').textContent = btnTxt;
   $('submit-btn').disabled = true;
 
@@ -1999,7 +2100,7 @@ async function saveProject() {
   } catch(e) {
     toast('Ошибка: ' + e.message);
     $('submit-spin').classList.add('hidden');
-    $('submit-btn-txt').textContent = 'Отправить на экспертизу';
+    $('submit-btn-txt').textContent = t('send_to_review');
     $('submit-btn').disabled = false;
   }
 }
@@ -2016,7 +2117,7 @@ async function loadLeaderboard(type='season') {
     const col = type==='season'?'season_xp':'global_xp';
     // Separate ladders: experts see only the expert ranking, everyone else sees the user ranking.
     const audience = (CU?.role === 'expert') ? 'expert' : 'user';
-    const t = $('lb-title'); if (t) t.textContent = audience === 'expert' ? '🔬 Рейтинг экспертов' : '🏆 Рейтинг';
+    const lbT = $('lb-title'); if (lbT) lbT.textContent = audience === 'expert' ? t('lb_title_expert') : t('lb_title');
     const { data } = await sb.from('profiles').select('id,full_name,league,season_xp,global_xp,role').eq('role',audience).order(col,{ascending:false}).limit(50);
     if (!data?.length) { $('lb-list').innerHTML = '<div class="empty"><div class="empty-ic">🏆</div><div class="empty-title">Пока нет участников</div></div>'; return; }
     renderPodium(data.slice(0,3), type);
@@ -2061,7 +2162,7 @@ function renderRankList(data, type) {
 /* ===== PROFILE ===== */
 async function loadProfile() {
   const body = $('profile-body');
-  if (!CU) { body.innerHTML = '<div class="empty"><div class="empty-ic">👤</div><div class="empty-title">Войдите в аккаунт</div></div>'; return; }
+  if (!CU) { body.innerHTML = `<div class="empty"><div class="empty-ic">👤</div><div class="empty-title">${t('login_account')}</div></div>`; return; }
   body.innerHTML = '<div class="spinner"></div>';
   try {
     const { data: fresh } = await sb.from('profiles').select('*').eq('id',CU.id).single();
@@ -2100,12 +2201,12 @@ async function loadProfile() {
       <div class="section-h">Привилегии лиги ${badge} ${lgName}</div>
       <div class="card-simple"><ul style="padding-left:18px">${privs}</ul></div>
 
-      ${CU.role==='expert' ? `<button class="btn ghost sm" onclick="go('review')" style="margin-bottom:12px">🔍 Очередь на экспертизу</button>` : ''}
+      ${CU.role==='expert' ? `<button class="btn ghost sm" onclick="go('review')" style="margin-bottom:12px">${t('review_queue_btn')}</button>` : ''}
       ${CU.role!=='admin' ? `<button class="btn ghost sm" onclick="go('incubator')" style="margin-bottom:12px">🤝 Инкубатор${CU.league==='innovator'?' · ментор':''}</button>` : ''}
       ${CU.role==='admin' ? `<button class="btn sm" onclick="go('admin')" style="margin-bottom:12px;background:#5469d4">⚙️ Панель администратора</button>` : ''}
 
       ${CU.role!=='admin' ? `
-      <div class="section-h">Мои проекты</div>
+      <div class="section-h">${t('my_projects')}</div>
       <div id="my-projects"><div class="spinner" style="width:32px;height:32px;border-width:2px;margin:16px auto"></div></div>
 
       <div class="section-h">История XP</div>
@@ -2120,7 +2221,7 @@ async function loadMyProjects() {
   if (!box || !CU) return;
   try {
     const { data } = await sb.from('projects').select('id,title,status,created_at,likes_count').eq('user_id',CU.id).order('created_at',{ascending:false});
-    if (!data?.length) { box.innerHTML = '<p class="text-hint text-sm">Вы ещё не подавали проекты</p>'; return; }
+    if (!data?.length) { box.innerHTML = `<p class="text-hint text-sm">${t('no_my_projects')}</p>`; return; }
     box.innerHTML = data.map(p=>{
       const sl = L().statuses[p.status]||p.status;
       return `<div class="card-simple flex items-center gap8" style="cursor:pointer;margin-bottom:8px" onclick="openProject('${esc(p.id)}')">
@@ -2152,7 +2253,7 @@ let incubatorChannel = null;
 
 async function loadIncubator() {
   const body = $('incubator-body');
-  if (!CU || !sbOk()) { body.innerHTML = '<div class="empty"><div class="empty-ic">🔒</div><div class="empty-title">Войдите в аккаунт</div></div>'; return; }
+  if (!CU || !sbOk()) { body.innerHTML = `<div class="empty"><div class="empty-ic">🔒</div><div class="empty-title">${t('login_account')}</div></div>`; return; }
   if (incubatorChannel) { try { sb.removeChannel(incubatorChannel); } catch(_){} incubatorChannel = null; }
   body.innerHTML = '<div class="spinner"></div>';
   try {
@@ -2334,7 +2435,7 @@ async function loadExpertKpi() {
 
 async function loadReviewHistory() {
   const body = $('review-body');
-  if (!CU || CU.role !== 'expert') { body.innerHTML = '<div class="empty"><div class="empty-ic">🔒</div><div class="empty-title">Только для экспертов</div></div>'; return; }
+  if (!CU || CU.role !== 'expert') { body.innerHTML = `<div class="empty"><div class="empty-ic">🔒</div><div class="empty-title">${t('experts_only')}</div></div>`; return; }
   body.innerHTML = '<div class="spinner"></div>';
   try {
     const kpi = await loadExpertKpi();
@@ -2363,7 +2464,7 @@ async function loadReviews() {
   const body = $('review-body');
   $('rev-queue-tab')?.classList.add('on'); $('rev-hist-tab')?.classList.remove('on');
   if (!CU || CU.role !== 'expert') {
-    body.innerHTML = '<div class="empty"><div class="empty-ic">🔒</div><div class="empty-title">Только для экспертов</div><p class="text-hint text-sm">Обратитесь к администратору для получения роли эксперта.</p></div>';
+    body.innerHTML = `<div class="empty"><div class="empty-ic">🔒</div><div class="empty-title">${t('experts_only')}</div><p class="text-hint text-sm">${t('experts_only_hint')}</p></div>`;
     return;
   }
   body.innerHTML = '<div class="spinner"></div>';
