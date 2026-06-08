@@ -372,13 +372,18 @@ textarea.input{resize:vertical;min-height:96px}
       <div id="r-occupation"></div>
       <div class="err-msg" id="e-occ">Выберите вариант</div>
     </div>
-    <div class="group" id="r-workplace-wrap" style="display:none">
-      <label class="lbl" id="r-workplace-lbl">Место работы/учёбы</label>
-      <input class="input" id="r-workplace" type="text" placeholder="Название организации" oninput="checkRegForm()">
-    </div>
     <div class="group">
       <label class="lbl">Регион</label>
-      <select class="input" id="r-region"></select>
+      <select class="input" id="r-region" onchange="onRegionChange()"></select>
+    </div>
+    <div class="group" id="r-university-wrap" style="display:none">
+      <label class="lbl">Где учитесь (ВУЗ / колледж)</label>
+      <select class="input" id="r-university" onchange="checkRegForm()"></select>
+      <div class="hint-text" style="margin-top:4px">Сначала выберите регион</div>
+    </div>
+    <div class="group" id="r-workplace-wrap" style="display:none">
+      <label class="lbl" id="r-workplace-lbl">Место работы</label>
+      <input class="input" id="r-workplace" type="text" placeholder="Название организации" oninput="checkRegForm()">
     </div>
     <div class="group">
       <label class="lbl">Специализация (теги)</label>
@@ -736,6 +741,23 @@ const LEAGUE_ORDER = ['novice','amateur','professional','innovator'];
 const LEAGUE_LIMITS = { novice:2, amateur:5, professional:10, innovator:Infinity };
 // Regions of Uzbekistan (for talent registry & ministry analytics).
 const UZ_REGIONS = ['Toshkent shahri','Toshkent viloyati','Andijon','Buxoro','Fargʻona','Jizzax','Xorazm','Namangan','Navoiy','Qashqadaryo','Qoraqalpogʻiston','Samarqand','Sirdaryo','Surxondaryo'];
+// Universities/colleges by region (medical-focused + major ones). 'Другое' lets others register.
+const UZ_UNIVERSITIES = {
+  'Toshkent shahri':['Toshkent tibbiyot akademiyasi (TTA)','Toshkent pediatriya tibbiyot instituti','Toshkent davlat stomatologiya instituti','Toshkent farmatsevtika instituti','Oʻzbekiston Respublikasi davlat sogʻliqni saqlash universiteti','Oʻzbekiston Milliy universiteti (OʻzMU)','Toshkent axborot texnologiyalari universiteti (TATU)','Toshkent davlat texnika universiteti','Toshkent davlat iqtisodiyot universiteti','Toshkent davlat yuridik universiteti','Toshkent davlat pedagogika universiteti','Westminster (WIUT)','Inha University in Tashkent'],
+  'Toshkent viloyati':['Chirchiq davlat pedagogika universiteti','Toshkent viloyat tibbiyot kolleji','Angren universiteti'],
+  'Andijon':['Andijon davlat tibbiyot instituti','Andijon davlat universiteti','Andijon mashinasozlik instituti','Andijon qishloq xoʻjaligi instituti'],
+  'Buxoro':['Buxoro davlat tibbiyot instituti','Buxoro davlat universiteti','Buxoro muhandislik-texnologiya instituti'],
+  'Fargʻona':['Fargʻona jamoat salomatligi tibbiyot instituti','Fargʻona davlat universiteti','Fargʻona politexnika instituti'],
+  'Jizzax':['Jizzax davlat pedagogika universiteti','Jizzax politexnika instituti','Jizzax tibbiyot kolleji'],
+  'Xorazm':['Toshkent tibbiyot akademiyasi Urganch filiali','Urganch davlat universiteti','Urganch davlat pedagogika instituti'],
+  'Namangan':['Namangan davlat universiteti','Namangan muhandislik-texnologiya instituti','Namangan muhandislik-qurilish instituti','Namangan tibbiyot kolleji'],
+  'Navoiy':['Navoiy davlat konchilik va texnologiyalar universiteti','Navoiy davlat pedagogika instituti','Navoiy tibbiyot kolleji'],
+  'Qashqadaryo':['Qarshi davlat universiteti','Toshkent tibbiyot akademiyasi Termiz filiali (Qarshi)','Qarshi muhandislik-iqtisodiyot instituti'],
+  'Qoraqalpogʻiston':['Berdaq nomidagi Qoraqalpoq davlat universiteti','Qoraqalpogʻiston tibbiyot instituti (Nukus)','Nukus davlat pedagogika instituti'],
+  'Samarqand':['Samarqand davlat tibbiyot universiteti','Samarqand davlat universiteti','Samarqand davlat veterinariya meditsinasi universiteti','Samarqand davlat chet tillar instituti','Samarqand davlat arxitektura-qurilish universiteti'],
+  'Sirdaryo':['Guliston davlat universiteti','Sirdaryo tibbiyot kolleji'],
+  'Surxondaryo':['Termiz davlat universiteti','Termiz muhandislik-texnologiya instituti','Surxondaryo tibbiyot kolleji'],
+};
 function leagueLimit() { const v = LEAGUE_LIMITS[CU?.league]; return (v != null) ? v : 2; }
 async function projectCount() {
   try { const { count } = await sb.from('projects').select('id',{count:'exact',head:true}).eq('user_id', CU.id); return count || 0; }
@@ -968,24 +990,34 @@ function buildRegForm() {
     <div class="radio-opt${regOcc===i?' sel':''}" onclick="selectOcc(${i})">
       <div class="radio-dot"></div>${esc(o)}
     </div>`).join('');
+  const studying = (regOcc===0 || regOcc===2);
+  const working  = (regOcc===1 || regOcc===2);
+  const uniWrap = $('r-university-wrap');
   const wpWrap = $('r-workplace-wrap');
-  const wpLbl = $('r-workplace-lbl');
-  if (regOcc === 3) { wpWrap.style.display='none'; }
-  else if (regOcc >= 0) {
-    wpWrap.style.display='';
-    const labs = ['Место учёбы','Место работы','Место учёбы / работы'];
-    wpLbl.textContent = labs[regOcc] || 'Место работы/учёбы';
-  } else { wpWrap.style.display='none'; }
+  if (uniWrap) uniWrap.style.display = studying ? '' : 'none';
+  if (wpWrap)  wpWrap.style.display  = working  ? '' : 'none';
   const regSel = $('r-region');
   if (regSel && !regSel.dataset.filled) {
     regSel.innerHTML = '<option value="">— Регион не указан —</option>' + UZ_REGIONS.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join('');
     regSel.dataset.filled = '1';
   }
+  buildUniversities();
   const tagsBox = $('r-tags');
   tagsBox.innerHTML = L().tags.map((t,i) => `
     <span class="chip${regTags.includes(i)?' sel':''}" onclick="toggleRegTag(${i})">#${esc(t)}</span>`).join('');
 }
 
+function buildUniversities() {
+  const sel = $('r-university'); if (!sel) return;
+  const region = $('r-region')?.value || '';
+  const list = UZ_UNIVERSITIES[region] || [];
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">' + (region ? '— Выберите ВУЗ / колледж —' : '— Сначала выберите регион —') + '</option>'
+    + list.map(u=>`<option value="${esc(u)}">${esc(u)}</option>`).join('')
+    + (region ? '<option value="Другое">Другое</option>' : '');
+  if (prev && (list.includes(prev) || prev==='Другое')) sel.value = prev;
+}
+function onRegionChange() { buildUniversities(); checkRegForm(); }
 function selectOcc(i) { regOcc = i; buildRegForm(); checkRegForm(); }
 function toggleRegTag(i) {
   const idx = regTags.indexOf(i);
@@ -1021,7 +1053,10 @@ async function doRegister() {
   const name      = $('r-name').value.trim();
   const phone     = $('r-phone').value.trim();
   const pnfl      = $('r-pnfl').value.trim();
-  const workplace = $('r-workplace').value.trim();
+  // Place of study (university select) and/or work (text), combined into workplace.
+  const university = (regOcc===0 || regOcc===2) ? ($('r-university')?.value || '') : '';
+  const workText  = (regOcc===1 || regOcc===2) ? ($('r-workplace')?.value.trim() || '') : '';
+  const workplace = [university, workText].filter(Boolean).join(' / ');
 
   if (!username || username.length < 3) { toast('Логин: минимум 3 символа'); return; }
   if (!/^[a-z0-9_]+$/.test(username))   { toast('Логин: только a-z, 0-9, _'); return; }
