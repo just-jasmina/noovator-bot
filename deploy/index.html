@@ -637,6 +637,52 @@ function xpFor(action, fallback) {
   return (XP_RULES[action] != null) ? XP_RULES[action] : fallback;
 }
 
+// Project lifecycle tracker (TZ §4): visual progress bar for the author.
+function lifecycleTracker(status) {
+  if (status === 'rejected') {
+    return `<div class="card-simple" style="padding:12px;margin-bottom:14px;border-left:3px solid #dc2626">
+      <div style="font-weight:700;font-size:13px;color:#b91c1c">✗ Отклонён экспертами</div>
+      <div class="text-hint" style="font-size:12px;margin-top:3px">Проект опубликован в общую ленту для обсуждения сообществом</div></div>`;
+  }
+  const steps = [
+    { ic:'🕵️', label:'Экспертиза' },
+    { ic:'✅', label:'Одобрен' },
+    { ic:'🚀', label:'Пилот' },
+    { ic:'🌍', label:'Масштаб' },
+  ];
+  const order = { draft:-1, under_review:0, crowdsource:1, approved:1, incubation:1, pilot:2, scale:3, scaled:3, ministry:3 };
+  const cur = (order[status] != null) ? order[status] : 0;
+  let html = '';
+  steps.forEach((s,i) => {
+    const done = i < cur, active = i === cur;
+    const bg = done ? '#16a34a' : active ? 'var(--accent)' : 'var(--bg)';
+    const fg = (done||active) ? '#fff' : 'var(--hint)';
+    const bd = (done||active) ? bg : 'var(--sep)';
+    if (i > 0) html += `<div style="flex:1;height:3px;background:${i<=cur?'#16a34a':'var(--sep)'};margin-top:15px"></div>`;
+    html += `<div style="display:flex;flex-direction:column;align-items:center;min-width:44px">
+      <div style="width:32px;height:32px;border-radius:50%;background:${bg};color:${fg};border:2px solid ${bd};display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">${done?'✓':s.ic}</div>
+      <div style="font-size:9px;margin-top:5px;color:${active?'var(--accent)':'var(--hint)'};font-weight:${active?'700':'500'};text-align:center;line-height:1.1">${s.label}</div>
+    </div>`;
+  });
+  return `<div class="card-simple" style="padding:14px 10px;margin-bottom:14px">
+    <div style="font-size:11px;font-weight:700;color:var(--hint);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">📍 Этап проекта</div>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between">${html}</div></div>`;
+}
+
+// Compact lifecycle dots for list cards.
+function miniTracker(status) {
+  if (status === 'rejected') return `<span style="font-size:11px;color:#b91c1c;font-weight:600">✗ в ленте</span>`;
+  const order = { draft:-1, under_review:0, crowdsource:1, approved:1, incubation:1, pilot:2, scale:3, scaled:3, ministry:3 };
+  const cur = (order[status] != null) ? order[status] : 0;
+  let dots = '';
+  for (let i=0;i<4;i++) {
+    const on = i <= cur;
+    dots += `<span style="width:7px;height:7px;border-radius:50%;background:${on?(i<cur?'#16a34a':'var(--accent)'):'var(--sep)'};display:inline-block"></span>`;
+    if (i<3) dots += `<span style="width:9px;height:2px;background:${i<cur?'#16a34a':'var(--sep)'};display:inline-block;vertical-align:middle"></span>`;
+  }
+  return `<span style="display:inline-flex;align-items:center">${dots}</span>`;
+}
+
 // SLA badge for an expert review. Deadline = sla_deadline, or created_at + 7 days.
 function slaBadge(deadline, createdAt) {
   let dl = deadline ? new Date(deadline) : (createdAt ? new Date(new Date(createdAt).getTime() + 7*86400000) : null);
@@ -1176,6 +1222,7 @@ async function openProject(id) {
         <span class="lg-badge lg-${esc(lg)}">${badge} ${L().leagues[lg]}</span>
       </div>
       <div class="flex" style="flex-wrap:wrap;gap:6px;margin-bottom:16px">${tags}</div>
+      ${lifecycleTracker(p.status)}
       <div class="card-simple">
         <div style="font-size:13px;font-weight:700;color:var(--hint);margin-bottom:6px">КРАТКО</div>
         <p style="font-size:14px;line-height:1.6">${esc(p.pitch)}</p>
@@ -1662,7 +1709,7 @@ async function loadMyProjects() {
     box.innerHTML = data.map(p=>{
       const sl = L().statuses[p.status]||p.status;
       return `<div class="card-simple flex items-center gap8" style="cursor:pointer;margin-bottom:8px" onclick="openProject('${esc(p.id)}')">
-        <div style="flex:1"><div style="font-weight:600;font-size:14px">${esc(p.title)}</div><div style="font-size:12px;color:var(--hint);margin-top:2px">${fmtDate(p.created_at)}</div></div>
+        <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px">${esc(p.title)}</div><div style="display:flex;align-items:center;gap:8px;margin-top:4px"><span style="font-size:12px;color:var(--hint)">${fmtDate(p.created_at)}</span>${miniTracker(p.status)}</div></div>
         <span class="status-badge s-${esc(p.status)}">${esc(sl)}</span>
       </div>`;
     }).join('');
