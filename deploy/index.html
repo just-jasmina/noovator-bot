@@ -130,6 +130,7 @@ textarea.input{resize:vertical;min-height:96px}
 .status-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
 .s-draft{background:#f0f4ff;color:#5469d4}
 .s-under_review{background:#fff7e6;color:#b45309}
+.s-revision{background:#fef3c7;color:#92400e}
 .s-approved{background:#f0fdf4;color:#15803d}
 .s-rejected{background:#fef2f2;color:#dc2626}
 .s-pilot{background:#f0f9ff;color:#0369a1}
@@ -584,7 +585,7 @@ const I18N = {
     feed:'Лента', submit:'Проект', leaderboard:'Рейтинг', profile:'Я',
     newest:'🕐 Новые', popular:'🔥 Популярные',
     season:'Сезон', global:'Всё время',
-    statuses:{draft:'Черновик',under_review:'На экспертизе',approved:'Одобрен',rejected:'Отклонён',pilot:'Пилот',scale:'Масштаб'},
+    statuses:{draft:'Черновик',under_review:'На экспертизе',revision:'На доработке',approved:'Одобрен',rejected:'Отклонён',pilot:'Пилот',scale:'Масштаб'},
     leagues:{novice:'Новичок',amateur:'Любитель',professional:'Профессионал',innovator:'Новатор'},
     league_badges:{novice:'🌱',amateur:'🔥',professional:'⭐',innovator:'🏆'},
     occ:['Учусь','Работаю','Учусь и работаю','Безработный'],
@@ -605,7 +606,7 @@ const I18N = {
     feed:'Lenta', submit:'Loyiha', leaderboard:'Reyting', profile:'Men',
     newest:'🕐 Yangi', popular:'🔥 Mashhur',
     season:'Mavsum', global:'Hammavaqt',
-    statuses:{draft:'Qoralama',under_review:'Ekspertizada',approved:'Tasdiqlangan',rejected:'Rad etilgan',pilot:'Pilot',scale:'Kengaytirish'},
+    statuses:{draft:'Qoralama',under_review:'Ekspertizada',revision:'Qayta ishlashda',approved:'Tasdiqlangan',rejected:'Rad etilgan',pilot:'Pilot',scale:'Kengaytirish'},
     leagues:{novice:'Yangi boshlovchi',amateur:'Havaskor',professional:'Professional',innovator:'Novator'},
     league_badges:{novice:'🌱',amateur:'🔥',professional:'⭐',innovator:'🏆'},
     occ:["O'qiyman","Ishlayman","O'qiyman va ishlayman","Ishsiz"],
@@ -672,6 +673,11 @@ function lifecycleTracker(status) {
       <div style="font-weight:700;font-size:13px;color:#b91c1c">✗ Отклонён экспертами</div>
       <div class="text-hint" style="font-size:12px;margin-top:3px">Проект опубликован в общую ленту для обсуждения сообществом</div></div>`;
   }
+  if (status === 'revision') {
+    return `<div class="card-simple" style="padding:12px;margin-bottom:14px;border-left:3px solid #d97706">
+      <div style="font-weight:700;font-size:13px;color:#92400e">↩️ Возвращён на доработку</div>
+      <div class="text-hint" style="font-size:12px;margin-top:3px">Эксперты оставили замечания. Исправьте проект и отправьте на повторную экспертизу.</div></div>`;
+  }
   const steps = [
     { ic:'🕵️', label:'Экспертиза' },
     { ic:'✅', label:'Одобрен' },
@@ -700,6 +706,7 @@ function lifecycleTracker(status) {
 // Compact lifecycle dots for list cards.
 function miniTracker(status) {
   if (status === 'rejected') return `<span style="font-size:11px;color:#b91c1c;font-weight:600">✗ в ленте</span>`;
+  if (status === 'revision') return `<span style="font-size:11px;color:#b45309;font-weight:600">↩️ доработка</span>`;
   const order = { draft:-1, under_review:0, crowdsource:1, approved:1, incubation:1, pilot:2, scale:3, scaled:3, ministry:3 };
   const cur = (order[status] != null) ? order[status] : 0;
   let dots = '';
@@ -1285,8 +1292,10 @@ function projCard(p) {
 }
 
 /* ===== PROJECT DETAIL ===== */
+let projDetail = null;   // last opened project object (used by the revision flow)
 async function openProject(id) {
   currentProjId = id;
+  projDetail = null;
   CS = 'project';
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
   $('s-project').classList.add('on');
@@ -1299,6 +1308,21 @@ async function openProject(id) {
   try {
     const { data: p } = await sb.from('projects').select('*, profiles!projects_user_id_fkey(full_name,league,season_xp,region,workplace)').eq('id',id).single();
     if (!p) { body.innerHTML = '<p class="text-hint" style="padding:24px">Проект не найден</p>'; return; }
+    projDetail = p;
+    // Revision flow: the author sees the experts' notes and can resubmit.
+    let revisionBlock = '';
+    if (CU?.id === p.user_id && p.status === 'revision') {
+      const { data: fb } = await sb.from('reviews').select('review_text,decision').eq('project_id', id);
+      const notes = (fb||[]).filter(r=>r.review_text && r.review_text.trim())
+        .map((r,i)=>`<div style="background:var(--bg);border-radius:10px;padding:10px;margin-top:8px;font-size:13px;line-height:1.55">
+          <div style="font-weight:700;color:#92400e;font-size:12px;margin-bottom:4px">🔬 Эксперт ${i+1}${r.decision==='revision'?' · на доработку':''}</div>${esc(r.review_text)}</div>`).join('');
+      revisionBlock = `<div class="card-simple" style="border-left:3px solid #d97706;margin-bottom:14px">
+        <div style="font-weight:800;font-size:14px;color:#92400e">↩️ Замечания экспертов</div>
+        <div class="text-hint" style="font-size:12px;margin-top:2px">Исправьте проект с учётом замечаний и отправьте на повторную экспертизу.</div>
+        ${notes || '<div class="text-hint" style="font-size:13px;margin-top:8px">Текстовых замечаний нет.</div>'}
+        <button class="btn sm" style="width:100%;margin-top:12px;background:#d97706" onclick="openRevision()">✏️ Доработать и отправить заново</button>
+      </div>`;
+    }
     $('proj-top-title').textContent = p.title?.substring(0,30) || 'Проект';
     const author = p.profiles || {};
     const lg = author.league || 'novice';
@@ -1326,6 +1350,7 @@ async function openProject(id) {
       ${(author.region||author.workplace)?`<div class="text-hint" style="font-size:12px;margin-bottom:12px">${author.region?'📍 '+esc(author.region):''}${author.region&&author.workplace?' · ':''}${author.workplace?'🎓 '+esc(author.workplace):''}</div>`:''}
       <div class="flex" style="flex-wrap:wrap;gap:6px;margin-bottom:16px">${tags}</div>
       ${lifecycleTracker(p.status)}
+      ${revisionBlock}
       ${canMentor ? `<button class="btn sm" style="width:100%;margin-bottom:14px;background:#7c3aed" onclick="becomeMentor('${esc(id)}','${esc(p.user_id)}')">🤝 Стать ментором проекта</button>` : ''}
       ${mtr ? `<div class="card-simple" style="margin-bottom:14px;padding:10px 12px;border-left:3px solid #7c3aed"><span style="font-size:12px;color:#7c3aed;font-weight:600">🤝 У проекта есть ментор (Инкубатор)</span></div>` : ''}
       <div class="card-simple">
@@ -1527,6 +1552,55 @@ function openModal(html) {
   ov.innerHTML = `<div style="background:var(--card);width:100%;max-width:440px;border-radius:18px 18px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));max-height:82vh;overflow-y:auto">${html}</div>`;
 }
 function closeModal(){ document.getElementById('app-modal')?.remove(); }
+
+/* ===== REVISION: author reworks a returned project and resubmits ===== */
+function openRevision() {
+  const p = projDetail;
+  if (!p) { toast('Откройте проект заново'); return; }
+  const kpis = (p.kpis||[]).filter(k=>k&&k.trim()).join('\n');
+  openModal(`
+    <div style="font-size:17px;font-weight:800;margin-bottom:4px">✏️ Доработка проекта</div>
+    <div class="text-hint" style="font-size:12px;margin-bottom:14px">Внесите правки по замечаниям экспертов. После отправки проект снова уйдёт на экспертизу к тем же экспертам.</div>
+    <label class="text-hint" style="font-size:12px;font-weight:700">Название</label>
+    <input class="input" id="rv-title" style="margin:4px 0 12px" value="${esc(p.title||'')}">
+    <label class="text-hint" style="font-size:12px;font-weight:700">Кратко о проекте</label>
+    <textarea class="input" id="rv-pitch" style="min-height:64px;margin:4px 0 12px">${esc(p.pitch||'')}</textarea>
+    <label class="text-hint" style="font-size:12px;font-weight:700">Проблема</label>
+    <textarea class="input" id="rv-problem" style="min-height:64px;margin:4px 0 12px">${esc(p.problem||'')}</textarea>
+    <label class="text-hint" style="font-size:12px;font-weight:700">Решение</label>
+    <textarea class="input" id="rv-solution" style="min-height:80px;margin:4px 0 12px">${esc(p.solution||'')}</textarea>
+    <label class="text-hint" style="font-size:12px;font-weight:700">KPI (по одному на строку)</label>
+    <textarea class="input" id="rv-kpis" style="min-height:64px;margin:4px 0 12px">${esc(kpis)}</textarea>
+    <label class="text-hint" style="font-size:12px;font-weight:700">Использование бюджета</label>
+    <textarea class="input" id="rv-budget" style="min-height:56px;margin:4px 0 14px">${esc(p.budget_use||'')}</textarea>
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost sm" style="flex:1" onclick="closeModal()">Отмена</button>
+      <button class="btn sm" style="flex:2;background:#d97706" onclick="submitRevision()">↩️ Отправить заново</button>
+    </div>`);
+}
+
+async function submitRevision() {
+  const p = projDetail; if (!p) return;
+  const tok = tnToken();
+  if (!tok) { toast('Сессия истекла — войдите заново'); return; }
+  const fields = {
+    title:      $('rv-title')?.value.trim() || '',
+    pitch:      $('rv-pitch')?.value.trim() || '',
+    problem:    $('rv-problem')?.value.trim() || '',
+    solution:   $('rv-solution')?.value.trim() || '',
+    budget_use: $('rv-budget')?.value.trim() || '',
+    kpis:       ($('rv-kpis')?.value || '').split('\n').map(s=>s.trim()).filter(Boolean),
+  };
+  if (!fields.title || !fields.pitch || !fields.solution) { toast('Заполните название, «кратко» и решение'); return; }
+  try {
+    const { error } = await sb.rpc('app_resubmit_project', { p_token: tok, p_project_id: p.id, p_fields: fields });
+    if (error) throw error;
+    closeModal();
+    haptic('success');
+    toast('Проект отправлен на повторную экспертизу!');
+    openProject(p.id);
+  } catch(e) { toast('Ошибка: ' + (e.message || 'не удалось отправить')); }
+}
 
 // Keyword -> direction index (aligned with CANON_TAGS / L().tags order).
 const TAG_KEYWORDS = {
@@ -2241,6 +2315,8 @@ async function submitReview(reviewId, decision) {
     if (newStatus) {
       const msg = newStatus === 'approved'
         ? '✅ Проект одобрен экспертами и перешёл на следующий этап!'
+        : newStatus === 'revision'
+        ? '↩️ Проект возвращён автору на доработку'
         : '📢 Проект отклонён экспертами и опубликован в общую ленту';
       setTimeout(() => toast(msg), 600);
     }
