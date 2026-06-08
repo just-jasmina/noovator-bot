@@ -467,6 +467,12 @@ textarea.input{resize:vertical;min-height:96px}
     <button class="btn-back" onclick="go('feed')">‹ Назад</button>
     <div class="topbar-title">🔍 Экспертиза</div>
   </div>
+  <div style="padding:12px var(--pad) 0">
+    <div class="tabs">
+      <button class="tab on" id="rev-queue-tab" onclick="showReviewTab('queue')">📋 Очередь</button>
+      <button class="tab" id="rev-hist-tab" onclick="showReviewTab('history')">✅ История</button>
+    </div>
+  </div>
   <div id="review-body" style="flex:1;overflow-y:auto;padding:var(--pad)"></div>
 </div>
 
@@ -1748,20 +1754,85 @@ async function awardXP(amount, reason, icon='⭐') {
 }
 
 /* ===== EXPERT REVIEW ===== */
+let reviewTab = 'queue';
+function showReviewTab(tab) {
+  reviewTab = tab;
+  $('rev-queue-tab')?.classList.toggle('on', tab==='queue');
+  $('rev-hist-tab')?.classList.toggle('on', tab==='history');
+  if (tab === 'history') loadReviewHistory(); else loadReviews();
+}
+
+// Expert's own KPI card (same metrics as the admin dashboard, but only for them).
+async function loadExpertKpi() {
+  try {
+    const { data } = await sb.from('reviews').select('decision,reviewed_at,created_at,sla_deadline').eq('expert_id', CU.id);
+    const R = data||[];
+    const done = R.filter(r=>r.decision), pend = R.filter(r=>!r.decision);
+    const overdue = pend.filter(r=>r.sla_deadline && new Date(r.sla_deadline) < Date.now());
+    const appr=done.filter(r=>r.decision==='approve').length, rej=done.filter(r=>r.decision==='reject').length, rev=done.filter(r=>r.decision==='revision').length;
+    const tot=appr+rej+rev, ar=tot?Math.round(appr/tot*100):0;
+    const turn=done.filter(r=>r.reviewed_at&&r.created_at).map(r=>(new Date(r.reviewed_at)-new Date(r.created_at))/86400000);
+    const at=turn.length?turn.reduce((a,b)=>a+b,0)/turn.length:0;
+    const slaOk=done.filter(r=>r.reviewed_at&&r.sla_deadline&&new Date(r.reviewed_at)<=new Date(r.sla_deadline)).length;
+    const sla=done.length?Math.round(slaOk/done.length*100):0;
+    const slaColor=sla>=80?'#16a34a':sla>=50?'#b45309':'#b91c1c';
+    const cell=(v,l,c)=>`<div style="text-align:center"><div style="font-size:18px;font-weight:800;color:${c||'var(--text)'}">${v}</div><div class="text-hint" style="font-size:10px">${l}</div></div>`;
+    return `<div class="card-simple" style="padding:14px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--hint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🏅 Мои показатели</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+        ${cell(done.length,'рецензий')}${cell(pend.length,'в работе',pend.length?'#b45309':null)}${cell(at?at.toFixed(1):'—','ср. дней')}${cell(done.length?sla+'%':'—','в срок',slaColor)}
+      </div>
+      ${tot?`<div style="display:flex;height:6px;border-radius:4px;overflow:hidden;margin-top:10px">
+        <div style="width:${Math.round(appr/tot*100)}%;background:#16a34a"></div><div style="width:${Math.round(rev/tot*100)}%;background:#d4a017"></div><div style="width:${Math.round(rej/tot*100)}%;background:#dc2626"></div></div>
+        <div class="text-hint" style="font-size:10px;margin-top:4px">✅ ${appr} одобрено · ↩️ ${rev} доработка · ✗ ${rej} отклонено (одобрено ${ar}%)</div>`:''}
+      ${overdue.length?`<div style="font-size:11px;color:#b91c1c;margin-top:8px">⚠️ Просрочено: ${overdue.length} — переназначаются резерву</div>`:''}
+    </div>`;
+  } catch(e) { return ''; }
+}
+
+async function loadReviewHistory() {
+  const body = $('review-body');
+  if (!CU || CU.role !== 'expert') { body.innerHTML = '<div class="empty"><div class="empty-ic">🔒</div><div class="empty-title">Только для экспертов</div></div>'; return; }
+  body.innerHTML = '<div class="spinner"></div>';
+  try {
+    const kpi = await loadExpertKpi();
+    const { data } = await sb.from('reviews')
+      .select('id,decision,review_text,reviewed_at,projects!reviews_project_id_fkey(title,tags)')
+      .eq('expert_id',CU.id).not('decision','is',null).order('reviewed_at',{ascending:false}).limit(50);
+    const DL = { approve:{t:'Одобрено',c:'#16a34a',ic:'✅'}, reject:{t:'Отклонено',c:'#dc2626',ic:'✗'}, revision:{t:'Доработка',c:'#d4a017',ic:'↩️'} };
+    const list = (data||[]).map(r=>{
+      const d = DL[r.decision] || {t:r.decision,c:'var(--hint)',ic:'•'};
+      const txt = r.review_text ? (r.review_text.length>260 ? r.review_text.slice(0,260)+'…' : r.review_text) : '';
+      return `<div class="card-simple" style="margin-bottom:10px;padding:12px">
+        <div class="flex items-center gap8" style="justify-content:space-between;margin-bottom:6px">
+          <div class="fw7 text-sm" style="min-width:0">${esc(r.projects?.title||'—')}</div>
+          <span style="background:${d.c}22;color:${d.c};font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px;white-space:nowrap">${d.ic} ${d.t}</span>
+        </div>
+        <div class="proj-tags" style="margin-bottom:6px">${(r.projects?.tags||[]).map(t=>`<span class="proj-tag">${esc(tagLabel(t))}</span>`).join('')}</div>
+        ${txt?`<p style="font-size:12px;color:var(--text2);line-height:1.5;white-space:pre-wrap">${esc(txt)}</p>`:''}
+        <div class="text-hint" style="font-size:10px;margin-top:6px">${fmtDate(r.reviewed_at)}</div>
+      </div>`;
+    }).join('') || '<div class="empty"><div class="empty-ic">📭</div><div class="empty-title">Пока нет завершённых рецензий</div></div>';
+    body.innerHTML = kpi + list;
+  } catch(e) { body.innerHTML = `<p style="color:var(--danger);padding:16px">${esc(e.message)}</p>`; }
+}
+
 async function loadReviews() {
   const body = $('review-body');
+  $('rev-queue-tab')?.classList.add('on'); $('rev-hist-tab')?.classList.remove('on');
   if (!CU || CU.role !== 'expert') {
     body.innerHTML = '<div class="empty"><div class="empty-ic">🔒</div><div class="empty-title">Только для экспертов</div><p class="text-hint text-sm">Обратитесь к администратору для получения роли эксперта.</p></div>';
     return;
   }
   body.innerHTML = '<div class="spinner"></div>';
   try {
+    const kpi = await loadExpertKpi();
     const { data: reviews } = await sb.from('reviews')
       .select('id, sla_deadline, created_at, projects!reviews_project_id_fkey(id,title,tags,pitch,problem,solution,audience,kpis,effect,cost_range,budget_use,timeline,status)')
       .eq('expert_id',CU.id).is('decision',null).order('created_at',{ascending:true}).limit(20);
-    if (!reviews?.length) { body.innerHTML = '<div class="empty"><div class="empty-ic">✅</div><div class="empty-title">Barcha loyihalar ko\'rib chiqildi!</div><p class="text-hint text-sm">Yangi loyiha kelganda shu yerda ko\'rinadi</p></div>'; return; }
+    if (!reviews?.length) { body.innerHTML = kpi + '<div class="empty"><div class="empty-ic">✅</div><div class="empty-title">Barcha loyihalar ko\'rib chiqildi!</div><p class="text-hint text-sm">Yangi loyiha kelganda shu yerda ko\'rinadi</p></div>'; return; }
     const sec = (label, val) => val && String(val).trim() ? `<div style="margin-top:12px"><div style="font-size:12px;font-weight:700;color:var(--hint);margin-bottom:4px">${label}</div><p style="font-size:14px;line-height:1.55">${esc(val)}</p></div>` : '';
-    body.innerHTML = `<div style="font-size:13px;color:var(--hint);margin-bottom:14px">🕵️ Blind Review — muallif anonim · ${reviews.length} ta loyiha</div>` + reviews.map(r=>{
+    body.innerHTML = kpi + `<div style="font-size:13px;color:var(--hint);margin-bottom:14px">🕵️ Blind Review — muallif anonim · ${reviews.length} ta loyiha</div>` + reviews.map(r=>{
       const p = r.projects || {};
       const kpis = (p.kpis||[]).filter(k=>String(k).trim()).map(k=>`<li>${esc(k)}</li>`).join('');
       const aud = (p.audience||[]).join(', ');
