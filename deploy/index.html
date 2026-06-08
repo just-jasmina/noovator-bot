@@ -411,6 +411,7 @@ textarea.input{resize:vertical;min-height:96px}
       </div>
     </div>
   </div>
+  <div id="feed-news"></div>
   <div style="padding:0 var(--pad) 8px"><input class="input" id="feed-search" placeholder="🔎 Поиск по названию или описанию…" oninput="onFeedSearch(this.value)"></div>
   <div class="scroll-x" id="feed-tags" style="padding-bottom:8px"></div>
   <div class="scroll-x" id="feed-status" style="padding-bottom:8px"></div>
@@ -1204,9 +1205,51 @@ function openNotif(notifId, projectId) {
 
 /* ===== FEED ===== */
 const FEED_STATUSES = ['approved','pilot','scale','rejected'];
+/* ===== NEWS / ONBOARDING (greets users at the top of the feed) ===== */
+let newsCache = null;
+async function loadNews() {
+  const box = $('feed-news'); if (!box) return;
+  try {
+    if (!newsCache) {
+      const { data } = await sb.from('news').select('*').eq('is_active', true)
+        .order('is_pinned', { ascending:false }).order('created_at', { ascending:false }).limit(12);
+      newsCache = data || [];
+    }
+    renderNews();
+  } catch(e) { /* news is optional — never block the feed */ }
+}
+function newsTitle(n) { return (LANG==='uz' && n.title_uz) ? n.title_uz : n.title; }
+function newsBody(n)  { return (LANG==='uz' && n.body_uz)  ? n.body_uz  : n.body; }
+function renderNews() {
+  const box = $('feed-news'); if (!box) return;
+  if (!newsCache || !newsCache.length) { box.innerHTML = ''; return; }
+  const cards = newsCache.map(n => `
+    <div onclick="openNews('${esc(n.id)}')" style="flex:0 0 250px;background:var(--card);border:1px solid var(--sep);border-radius:14px;padding:12px;cursor:pointer">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:4px">
+        ${n.category?`<span class="chip" style="font-size:10px;padding:2px 8px">${esc(n.category)}</span>`:''}
+      </div>
+      <div style="font-weight:700;font-size:13px;line-height:1.3;margin-bottom:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(newsTitle(n))}</div>
+      <div class="text-hint" style="font-size:12px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${esc(newsBody(n))}</div>
+    </div>`).join('');
+  box.innerHTML = `
+    <div style="padding:10px var(--pad) 6px;font-weight:800;font-size:15px">📰 ${LANG==='uz'?'Yangiliklar va jahon tajribasi':'Новости и мировой опыт'}</div>
+    <div class="scroll-x" style="padding:0 var(--pad) 10px;gap:10px">${cards}</div>`;
+}
+function openNews(id) {
+  const n = (newsCache||[]).find(x => x.id === id);
+  if (!n) return;
+  openModal(`
+    <div class="text-hint" style="font-size:12px;margin-bottom:6px">${n.category?esc(n.category)+' · ':''}${fmtDate(n.created_at)}</div>
+    <div style="font-size:19px;font-weight:800;line-height:1.3;margin-bottom:12px">${esc(newsTitle(n))}</div>
+    <div style="font-size:14px;line-height:1.65;white-space:pre-wrap">${esc(newsBody(n))}</div>
+    ${n.link_url?`<a class="btn sm" style="display:block;text-align:center;margin-top:14px;text-decoration:none" href="${esc(n.link_url)}" target="_blank" rel="noopener">🔗 ${LANG==='uz'?'Batafsil':'Подробнее'}</a>`:''}
+    <button class="btn ghost sm" style="width:100%;margin-top:10px" onclick="closeModal()">${LANG==='uz'?'Yopish':'Закрыть'}</button>`);
+}
+
 async function loadFeed() {
   const list = $('feed-list');
   list.innerHTML = '<div class="spinner"></div>';
+  loadNews();
   buildFeedTags();
   buildFeedStatus();
   if (!sbOk()) { list.innerHTML = demoFeed(); return; }
@@ -1224,9 +1267,15 @@ async function loadFeed() {
     q = feedSort === 'popular' ? q.order('likes_count',{ascending:false}) : q.order('created_at',{ascending:false});
     const { data, error } = await q;
     if (error) throw error;
+    const isObserver = CU?.role === 'admin';
     list.innerHTML = data?.length
       ? data.map(p => projCard(p)).join('')
-      : `<div class="empty"><div class="empty-ic">🔭</div><div class="empty-title">Пока нет проектов</div><p class="text-hint text-sm">Станьте первым — отправьте инновацию</p></div>`;
+      : `<div class="empty" style="padding:32px 20px">
+          <div class="empty-ic">🚀</div>
+          <div class="empty-title">${LANG==='uz'?'Lenta hozircha boʻsh':'Лента пока пустая'}</div>
+          <p class="text-hint text-sm" style="margin-bottom:16px">${LANG==='uz'?'Yuqorida — yangiliklar va jahon tajribasi. Birinchi boʻling — innovatsiyangizni yuboring!':'Выше — новости и мировой опыт. Станьте первым — отправьте свою инновацию!'}</p>
+          ${!isObserver?`<button class="btn" style="max-width:260px;margin:0 auto" onclick="go('submit')">➕ ${LANG==='uz'?'Loyiha yuborish':'Подать проект'}</button>`:''}
+        </div>`;
   } catch(e) {
     list.innerHTML = `<div class="empty"><div class="empty-ic">⚠️</div><div class="empty-title">Ошибка загрузки</div><p class="text-hint text-sm">${esc(e.message)}</p></div>`;
   }
