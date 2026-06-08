@@ -401,7 +401,9 @@ textarea.input{resize:vertical;min-height:96px}
       </div>
     </div>
   </div>
+  <div style="padding:0 var(--pad) 8px"><input class="input" id="feed-search" placeholder="🔎 Поиск по названию или описанию…" oninput="onFeedSearch(this.value)"></div>
   <div class="scroll-x" id="feed-tags" style="padding-bottom:8px"></div>
+  <div class="scroll-x" id="feed-status" style="padding-bottom:8px"></div>
   <div style="padding:0 var(--pad) 10px">
     <div class="tabs">
       <button class="tab on" id="sort-new" onclick="setFeedSort('newest')">🕐 Новые</button>
@@ -495,6 +497,7 @@ textarea.input{resize:vertical;min-height:96px}
   <div style="padding:12px var(--pad) 0">
     <div class="tabs">
       <button class="tab on" id="adm-stats-tab" onclick="showAdminTab('stats')">📊 Статистика</button>
+      <button class="tab" id="adm-fraud-tab" onclick="showAdminTab('fraud')">🛡 Антифрод</button>
       <button class="tab" id="adm-users-tab" onclick="showAdminTab('users')">Пользователи</button>
       <button class="tab" id="adm-projs-tab" onclick="showAdminTab('projects')">Проекты</button>
     </div>
@@ -733,6 +736,9 @@ let CU = null; // currentUser profile
 let CS = 'loading'; // currentScreen
 let feedTag = null;
 let feedSort = 'newest';
+let feedStatus = null;     // null = all public statuses
+let feedSearch = '';
+let feedSearchTimer = null;
 let commentsChannel = null;
 let notifChannel = null;
 let lbType = 'season';
@@ -1120,19 +1126,24 @@ function openNotif(notifId, projectId) {
 }
 
 /* ===== FEED ===== */
+const FEED_STATUSES = ['approved','pilot','scale','rejected'];
 async function loadFeed() {
   const list = $('feed-list');
   list.innerHTML = '<div class="spinner"></div>';
   buildFeedTags();
+  buildFeedStatus();
   if (!sbOk()) { list.innerHTML = demoFeed(); return; }
   try {
     let q = sb.from('projects')
       .select('*, profiles!projects_user_id_fkey(full_name,league,season_xp)')
-      // under_review projects are with experts and must NOT appear in the public feed;
-      // they surface only after a decision (rejected -> published for discussion, or approved).
-      .in('status',['approved','pilot','scale','rejected'])
-      .limit(30);
+      .limit(40);
+    // Status filter: a specific public status, or all public ones (under_review stays hidden).
+    q = feedStatus ? q.eq('status', feedStatus) : q.in('status', FEED_STATUSES);
     if (feedTag !== null) q = q.overlaps('tags', [CANON_TAGS[feedTag], I18N.ru.tags[feedTag], I18N.uz.tags[feedTag]]);
+    if (feedSearch) {
+      const s = feedSearch.replace(/[,()%*]/g,' ').trim();
+      if (s) q = q.or(`title.ilike.%${s}%,pitch.ilike.%${s}%`);
+    }
     q = feedSort === 'popular' ? q.order('likes_count',{ascending:false}) : q.order('created_at',{ascending:false});
     const { data, error } = await q;
     if (error) throw error;
@@ -1149,6 +1160,17 @@ function buildFeedTags() {
   const allTag = `<span class="chip${feedTag===null?' sel':''}" onclick="setFeedTag(null)">Все</span>`;
   const tags = L().tags.map((t,i)=>`<span class="chip${feedTag===i?' sel':''}" onclick="setFeedTag(${i})">#${esc(t)}</span>`).join('');
   box.innerHTML = allTag + tags;
+}
+function buildFeedStatus() {
+  const box = $('feed-status'); if (!box) return;
+  const chip = (val,label) => `<span class="chip${feedStatus===val?' sel':''}" onclick="setFeedStatus(${val===null?'null':`'${val}'`})">${label}</span>`;
+  box.innerHTML = chip(null,'Все статусы') + FEED_STATUSES.map(s=>chip(s, L().statuses[s]||s)).join('');
+}
+function setFeedStatus(s) { feedStatus = s; loadFeed(); }
+function onFeedSearch(v) {
+  feedSearch = (v||'').trim();
+  clearTimeout(feedSearchTimer);
+  feedSearchTimer = setTimeout(loadFeed, 300);
 }
 function setFeedTag(i) { feedTag = i; loadFeed(); }
 function setFeedSort(s) {
@@ -1528,11 +1550,36 @@ async function submitNext() {
   await saveProject();
 }
 
+// --- Duplicate detection: Jaccard similarity over title words ---
+function _normWords(s){ return (s||'').toLowerCase().replace(/[^0-9a-zа-яё\s]/gi,' ').split(/\s+/).filter(w=>w.length>1); }
+function _sim(a,b){ const A=new Set(_normWords(a)), B=new Set(_normWords(b)); if(!A.size||!B.size) return 0; let inter=0; A.forEach(x=>{if(B.has(x))inter++;}); return inter/(A.size+B.size-inter); }
+async function findSimilarProject(title){
+  if(!title || !sbOk()) return null;
+  try {
+    const { data } = await sb.from('projects').select('id,title').limit(500);
+    let best=null, bs=0;
+    (data||[]).forEach(p=>{ const s=_sim(title,p.title); if(s>bs){ bs=s; best=p; } });
+    return bs>=0.6 ? best : null;
+  } catch(_){ return null; }
+}
+function confirmDialog(msg){
+  return new Promise(res=>{
+    try { if (tg?.showConfirm) { tg.showConfirm(msg, ok=>res(!!ok)); return; } } catch(_){}
+    res(window.confirm(msg));
+  });
+}
+
 async function saveProject() {
+  if (!sbOk() || !CU) { toast('Настройте Supabase и войдите в аккаунт'); return; }
+  // Duplicate detection — warn (not block) if a very similar project already exists.
+  const dup = await findSimilarProject(SF.name);
+  if (dup) {
+    const ok = await confirmDialog(`⚠️ Похожий проект уже существует:\n«${dup.title}»\n\nВсё равно отправить?`);
+    if (!ok) return;
+  }
   $('submit-spin').classList.remove('hidden');
   $('submit-btn-txt').textContent = 'Отправка…';
   $('submit-btn').disabled = true;
-  if (!sbOk() || !CU) { toast('Настройте Supabase и войдите в аккаунт'); $('submit-spin').classList.add('hidden'); $('submit-btn-txt').textContent = 'Отправить на экспертизу'; $('submit-btn').disabled=false; return; }
   try {
     const projectTags = SF.tags.map(i=>CANON_TAGS[i]);
     const { data: proj, error } = await sb.from('projects').insert({
@@ -1938,6 +1985,7 @@ let adminTab = 'stats';
 function showAdminTab(tab) {
   adminTab = tab;
   $('adm-stats-tab')?.classList.toggle('on', tab==='stats');
+  $('adm-fraud-tab')?.classList.toggle('on', tab==='fraud');
   $('adm-users-tab')?.classList.toggle('on', tab==='users');
   $('adm-projs-tab')?.classList.toggle('on', tab==='projects');
   loadAdmin(tab);
@@ -1953,6 +2001,8 @@ async function loadAdmin(tab='users') {
   try {
     if (tab === 'stats') {
       await renderAdminStats(body);
+    } else if (tab === 'fraud') {
+      await renderAntifraud(body);
     } else if (tab === 'users') {
       const { data } = await sb.from('profiles').select('*').neq('role','admin').order('created_at',{ascending:false});
       body.innerHTML = (data||[]).map(u=>`
@@ -1977,6 +2027,57 @@ async function loadAdmin(tab='users') {
         </div>`).join('');
     }
   } catch(e) { body.innerHTML = `<p style="color:var(--danger);padding:16px">${esc(e.message)}</p>`; }
+}
+
+async function renderAntifraud(body) {
+  const [pr, lk, pf] = await Promise.all([
+    sb.from('projects').select('user_id,title,created_at, profiles!projects_user_id_fkey(full_name)'),
+    sb.from('likes').select('user_id,created_at'),
+    sb.from('profiles').select('id,full_name,created_at,telegram_id,role'),
+  ]);
+  const P = pr.data||[], L = lk.data||[], U = pf.data||[];
+  const nameById = {}; U.forEach(u => nameById[u.id] = u.full_name || '—');
+
+  // 1) Mass submissions by one author (>= 4 projects)
+  const pcnt = {}; P.forEach(p => { pcnt[p.user_id] = (pcnt[p.user_id]||0)+1; });
+  const mass = Object.entries(pcnt).filter(([,c]) => c >= 4).sort((a,b)=>b[1]-a[1]);
+
+  // 2) Like-spammers (one user liked >= 15 projects)
+  const lcnt = {}; L.forEach(l => { lcnt[l.user_id] = (lcnt[l.user_id]||0)+1; });
+  const spam = Object.entries(lcnt).filter(([,c]) => c >= 15).sort((a,b)=>b[1]-a[1]);
+
+  // 3) Registration bursts (>= 4 accounts within 10 minutes => possible bot-farm)
+  const users = U.filter(u => u.created_at).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+  const bursts = []; let i=0;
+  while (i < users.length) {
+    let j = i;
+    while (j+1 < users.length && (new Date(users[j+1].created_at)-new Date(users[i].created_at)) <= 10*60000) j++;
+    if (j-i+1 >= 4) { bursts.push(users.slice(i, j+1)); i = j+1; } else i++;
+  }
+
+  const clean = '<div class="text-hint" style="font-size:13px;padding:8px 0">✅ Аномалий не обнаружено</div>';
+  const row = (title, sub, badge, color) => `<div class="admin-row">
+    <div style="flex:1;min-width:0"><div class="fw7 text-sm">${esc(title)}</div><div class="text-hint" style="font-size:11px">${esc(sub)}</div></div>
+    <span class="btn-xs" style="background:${color}22;color:${color};font-weight:700">${badge}</span></div>`;
+
+  const massHtml = mass.length ? mass.map(([uid,c]) => row(nameById[uid]||'—', 'Проектов подано: '+c, '⚠️ '+c, '#b45309')).join('') : clean;
+  const spamHtml = spam.length ? spam.map(([uid,c]) => row(nameById[uid]||'—', 'Лайков поставлено: '+c, '⚠️ '+c, '#dc2626')).join('') : clean;
+  const burstHtml = bursts.length ? bursts.map(b => row(`Всплеск: ${b.length} аккаунтов`, fmtDate(b[0].created_at)+' (за ≤10 мин)', '🤖 '+b.length, '#dc2626')).join('') : clean;
+
+  body.innerHTML = `
+    <div style="padding:14px var(--pad)">
+      <div class="section-h" style="margin-top:0">🛡 Антифрод-мониторинг</div>
+      <div class="text-hint" style="font-size:12px;margin-bottom:14px">Эвристики выявляют подозрительную активность. Это сигналы для проверки, а не автоблокировки.</div>
+
+      <div class="section-h">📤 Массовые подачи <span class="text-hint" style="font-weight:400;text-transform:none">(≥4 проектов)</span></div>
+      ${massHtml}
+
+      <div class="section-h">❤️ Накрутка лайков <span class="text-hint" style="font-weight:400;text-transform:none">(≥15 лайков от одного)</span></div>
+      ${spamHtml}
+
+      <div class="section-h">🤖 Всплески регистраций <span class="text-hint" style="font-weight:400;text-transform:none">(≥4 за 10 мин)</span></div>
+      ${burstHtml}
+    </div>`;
 }
 
 async function renderAdminStats(body) {
