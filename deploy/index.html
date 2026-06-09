@@ -606,7 +606,7 @@ const I18N = {
     feed:'Лента', submit:'Проект', leaderboard:'Рейтинг', profile:'Я',
     newest:'🕐 Новые', popular:'🔥 Популярные',
     season:'Сезон', global:'Всё время',
-    statuses:{draft:'Черновик',under_review:'На экспертизе',revision:'На доработке',approved:'Одобрен',rejected:'Отклонён',pilot:'Пилот',scale:'Масштаб'},
+    statuses:{draft:'Черновик',under_review:'На экспертизе',revision:'На доработке',approved:'Одобрен',rejected:'Отклонён',pilot:'Пилот',scale:'Масштаб',scaled:'Внедрён'},
     leagues:{novice:'Новичок',amateur:'Любитель',professional:'Профессионал',innovator:'Новатор'},
     league_badges:{novice:'🌱',amateur:'🔥',professional:'⭐',innovator:'🏆'},
     occ:['Учусь','Работаю','Учусь и работаю','Самозанятый','Безработный'],
@@ -627,7 +627,7 @@ const I18N = {
     feed:'Lenta', submit:'Loyiha', leaderboard:'Reyting', profile:'Men',
     newest:'🕐 Yangi', popular:'🔥 Mashhur',
     season:'Mavsum', global:'Hammavaqt',
-    statuses:{draft:'Qoralama',under_review:'Ekspertizada',revision:'Qayta ishlashda',approved:'Tasdiqlangan',rejected:'Rad etilgan',pilot:'Pilot',scale:'Kengaytirish'},
+    statuses:{draft:'Qoralama',under_review:'Ekspertizada',revision:'Qayta ishlashda',approved:'Tasdiqlangan',rejected:'Rad etilgan',pilot:'Pilot',scale:'Kengaytirish',scaled:'Joriy etilgan'},
     leagues:{novice:'Yangi boshlovchi',amateur:'Havaskor',professional:'Professional',innovator:'Novator'},
     league_badges:{novice:'🌱',amateur:'🔥',professional:'⭐',innovator:'🏆'},
     occ:["O'qiyman","Ishlayman","O'qiyman va ishlayman","Yakka tartibdagi tadbirkor","Ishsiz"],
@@ -692,6 +692,8 @@ const TT = {
     experts_only_hint:'Обратитесь к администратору для получения роли эксперта.',
     score_section:'⭐ Оценка по критериям (1–5)', score_required:'Оцените все критерии (1–5)', expert_score:'⭐ Экспертная оценка',
     my_pending:'⏳ Ваши проекты на рассмотрении',
+    stg_review:'Экспертиза', stg_approved:'Одобрен', stg_pilot:'Пилот', stg_scale:'Масштаб', stg_impl:'Внедрён',
+    curator_panel:'🚀 Куратор: продвижение проекта', advance_to:'Перевести на этап', stage_moved:'Проект переведён на новый этап',
     documents:'Документы проекта', attach_file:'Нажмите, чтобы прикрепить файл',
     file_hint:'PDF, DOCX, XLSX, PPTX, изображения, ZIP • до 10 МБ', uploading:'Загрузка…',
     file_too_big:'Файл больше 10 МБ', file_attached:'Файл прикреплён',
@@ -735,6 +737,8 @@ const TT = {
     experts_only_hint:'Ekspert rolini olish uchun administratorga murojaat qiling.',
     score_section:'⭐ Mezonlar bo‘yicha baho (1–5)', score_required:'Barcha mezonlarni baholang (1–5)', expert_score:'⭐ Ekspert bahosi',
     my_pending:'⏳ Ko‘rib chiqilayotgan loyihalaringiz',
+    stg_review:'Ekspertiza', stg_approved:'Tasdiqlangan', stg_pilot:'Pilot', stg_scale:'Kengaytirish', stg_impl:'Joriy etilgan',
+    curator_panel:'🚀 Kurator: loyihani ilgarilatish', advance_to:'Bosqichga o‘tkazish', stage_moved:'Loyiha yangi bosqichga o‘tkazildi',
     documents:'Loyiha hujjatlari', attach_file:'Fayl biriktirish uchun bosing',
     file_hint:'PDF, DOCX, XLSX, PPTX, rasm, ZIP • 10 MB gacha', uploading:'Yuklanmoqda…',
     file_too_big:'Fayl 10 MB dan katta', file_attached:'Fayl biriktirildi',
@@ -801,12 +805,13 @@ function lifecycleTracker(status) {
       <div class="text-hint" style="font-size:12px;margin-top:3px">Эксперты оставили замечания. Исправьте проект и отправьте на повторную экспертизу.</div></div>`;
   }
   const steps = [
-    { ic:'🕵️', label:'Экспертиза' },
-    { ic:'✅', label:'Одобрен' },
-    { ic:'🚀', label:'Пилот' },
-    { ic:'🌍', label:'Масштаб' },
+    { ic:'🕵️', label:t('stg_review') },
+    { ic:'✅', label:t('stg_approved') },
+    { ic:'🚀', label:t('stg_pilot') },
+    { ic:'🌍', label:t('stg_scale') },
+    { ic:'🏁', label:t('stg_impl') },
   ];
-  const order = { draft:-1, under_review:0, crowdsource:1, approved:1, incubation:1, pilot:2, scale:3, scaled:3, ministry:3 };
+  const order = { draft:-1, under_review:0, crowdsource:1, approved:1, incubation:1, pilot:2, scale:3, scaled:4, ministry:4 };
   const cur = (order[status] != null) ? order[status] : 0;
   let html = '';
   steps.forEach((s,i) => {
@@ -829,13 +834,13 @@ function lifecycleTracker(status) {
 function miniTracker(status) {
   if (status === 'rejected') return `<span style="font-size:11px;color:#b91c1c;font-weight:600">✗ в ленте</span>`;
   if (status === 'revision') return `<span style="font-size:11px;color:#b45309;font-weight:600">↩️ доработка</span>`;
-  const order = { draft:-1, under_review:0, crowdsource:1, approved:1, incubation:1, pilot:2, scale:3, scaled:3, ministry:3 };
+  const order = { draft:-1, under_review:0, crowdsource:1, approved:1, incubation:1, pilot:2, scale:3, scaled:4, ministry:4 };
   const cur = (order[status] != null) ? order[status] : 0;
   let dots = '';
-  for (let i=0;i<4;i++) {
+  for (let i=0;i<5;i++) {
     const on = i <= cur;
     dots += `<span style="width:7px;height:7px;border-radius:50%;background:${on?(i<cur?'#16a34a':'var(--accent)'):'var(--sep)'};display:inline-block"></span>`;
-    if (i<3) dots += `<span style="width:9px;height:2px;background:${i<cur?'#16a34a':'var(--sep)'};display:inline-block;vertical-align:middle"></span>`;
+    if (i<4) dots += `<span style="width:9px;height:2px;background:${i<cur?'#16a34a':'var(--sep)'};display:inline-block;vertical-align:middle"></span>`;
   }
   return `<span style="display:inline-flex;align-items:center">${dots}</span>`;
 }
@@ -1354,7 +1359,7 @@ function openNotif(notifId, projectId) {
 }
 
 /* ===== FEED ===== */
-const FEED_STATUSES = ['approved','pilot','scale','rejected'];
+const FEED_STATUSES = ['approved','pilot','scale','scaled','rejected'];
 /* ===== NEWS / ONBOARDING (greets users at the top of the feed) ===== */
 let newsCache = null;
 async function loadNews() {
@@ -1571,6 +1576,20 @@ function renderFiles(files) {
   </div>`;
 }
 
+// Curator: advance a project to the next lifecycle stage (server-checked).
+async function advanceProject(id, status) {
+  const tok = tnToken();
+  if (!tok) { toast(t('login_account')); return; }
+  if (!confirm(`${t('advance_to')} → ${L().statuses[status] || status}?`)) return;
+  try {
+    const { error } = await sb.rpc('app_advance_project', { p_token: tok, p_project_id: id, p_new_status: status });
+    if (error) throw error;
+    haptic('success');
+    toast(t('stage_moved'));
+    openProject(id);
+  } catch(e) { toast('Ошибка: ' + (e.message || 'не удалось')); }
+}
+
 let projDetail = null;   // last opened project object (used by the revision flow)
 async function openProject(id) {
   currentProjId = id;
@@ -1620,6 +1639,17 @@ async function openProject(id) {
         </div>`;
       }
     } catch(_) {}
+    // Curator controls: advance an approved project to the next lifecycle stage.
+    let curatorBlock = '';
+    if (CU?.role === 'curator') {
+      const nextStage = { approved:'pilot', pilot:'scale', scale:'scaled' }[p.status];
+      if (nextStage) {
+        curatorBlock = `<div class="card-simple" style="border-left:3px solid #16a34a">
+          <div style="font-weight:800;font-size:14px;margin-bottom:8px">${t('curator_panel')}</div>
+          <button class="btn sm" style="width:100%;background:#16a34a" onclick="advanceProject('${esc(id)}','${nextStage}')">${t('advance_to')} → ${esc(L().statuses[nextStage]||nextStage)}</button>
+        </div>`;
+      }
+    }
     $('proj-top-title').textContent = p.title?.substring(0,30) || 'Проект';
     const author = p.profiles || {};
     const lg = author.league || 'novice';
@@ -1647,6 +1677,7 @@ async function openProject(id) {
       ${(author.region||author.workplace)?`<div class="text-hint" style="font-size:12px;margin-bottom:12px">${author.region?'📍 '+esc(author.region):''}${author.region&&author.workplace?' · ':''}${author.workplace?'🎓 '+esc(author.workplace):''}</div>`:''}
       <div class="flex" style="flex-wrap:wrap;gap:6px;margin-bottom:16px">${tags}</div>
       ${lifecycleTracker(p.status)}
+      ${curatorBlock}
       ${revisionBlock}
       ${scoreBlock}
       ${canMentor ? `<button class="btn sm" style="width:100%;margin-bottom:14px;background:#7c3aed" onclick="becomeMentor('${esc(id)}','${esc(p.user_id)}')">🤝 Стать ментором проекта</button>` : ''}
@@ -2918,6 +2949,9 @@ async function exportTalentCSV() {
 async function exportRegionsCSV(regionRows) {
   downloadCSV('po_regionam.csv', ['Регион','Пользователей','Проектов'], regionRows.map(r=>[r.region, r.users, r.projects]));
 }
+async function exportUniversitiesCSV(rows) {
+  downloadCSV('po_vuzam.csv', ['ВУЗ / организация','Пользователей','Проектов'], (rows||[]).map(r=>[r.name, r.users, r.projects]));
+}
 
 async function renderReserve(body) {
   const [pf, pr] = await Promise.all([
@@ -2935,6 +2969,21 @@ async function renderReserve(body) {
     .map(r => ({ region:r, users:ru[r]||0, projects:rp[r]||0 }))
     .sort((a,b)=>b.projects-a.projects || b.users-a.users);
   const maxRP = Math.max(1, ...regionRows.map(r=>r.projects));
+
+  // --- University / organization aggregation (profiles.workplace) ---
+  const wpById = {}; U.forEach(u => wpById[u.id] = (u.workplace || '').trim() || '— не указано —');
+  const wu = {}, wp = {};
+  U.forEach(u => { const w = (u.workplace || '').trim() || '— не указано —'; wu[w] = (wu[w]||0)+1; });
+  P.forEach(p => { const w = wpById[p.user_id] || '— не указано —'; wp[w] = (wp[w]||0)+1; });
+  const wpRows = Array.from(new Set([...Object.keys(wu), ...Object.keys(wp)]))
+    .filter(w => w !== '— не указано —')
+    .map(w => ({ name:w, users:wu[w]||0, projects:wp[w]||0 }))
+    .sort((a,b)=>b.projects-a.projects || b.users-a.users).slice(0,20);
+  const maxWP = Math.max(1, ...wpRows.map(r=>Math.max(r.projects, r.users)));
+  window.__wpRows = wpRows;
+  const wpBars = wpRows.map(r => `<div style="margin-bottom:7px">
+    <div class="flex" style="justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:62%">${esc(r.name)}</span><span class="text-hint">${r.projects} пр. · ${r.users} польз.</span></div>
+    <div style="height:7px;background:var(--bg);border-radius:4px;overflow:hidden"><div style="width:${Math.round(Math.max(r.projects, r.users)/maxWP*100)}%;height:100%;background:#16a34a"></div></div></div>`).join('');
 
   // --- Talent pool (Professionals + Novators) ---
   const pcount = {}, acount = {};
@@ -2965,11 +3014,15 @@ async function renderReserve(body) {
         ${btn('exportProjectsCSV()','📄 Проекты')}
         ${btn('exportTalentCSV()','🎖 Резерв')}
         ${btn('exportRegionsCSV(window.__regionRows||[])','🗺 Регионы')}
+        ${btn('exportUniversitiesCSV(window.__wpRows||[])','🎓 ВУЗы')}
       </div>
       <div class="text-hint" style="font-size:11px;margin-bottom:6px">CSV (Excel). На мобильном Telegram скачивание может не работать — откройте на десктопе.</div>
 
       <div class="section-h">🗺 По регионам</div>
       ${regionBars || '<div class="text-hint text-sm">Нет данных</div>'}
+
+      <div class="section-h">🎓 По вузам и организациям <span class="text-hint" style="font-weight:400;text-transform:none">(топ-20)</span></div>
+      ${wpBars || '<div class="text-hint text-sm">Нет данных</div>'}
 
       <div class="section-h">🎖 Кадровый резерв <span class="text-hint" style="font-weight:400;text-transform:none">(Профессионалы + Новаторы)</span></div>
       ${talentCards}

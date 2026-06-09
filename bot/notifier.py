@@ -32,6 +32,7 @@ TYPE_EMOJI = {
     "mentor_assigned": "🤝",
     "incubator_message": "💬",
     "league_change": "🏆",
+    "stage": "🚀",
     "sla": "⏰",
     "profile_verified": "🎉",
 }
