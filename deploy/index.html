@@ -691,6 +691,7 @@ const TT = {
     send_to_review:'Отправить на экспертизу', next_arrow:'Далее →', no_my_projects:'Вы ещё не подавали проекты',
     experts_only_hint:'Обратитесь к администратору для получения роли эксперта.',
     score_section:'⭐ Оценка по критериям (1–5)', score_required:'Оцените все критерии (1–5)', expert_score:'⭐ Экспертная оценка',
+    my_pending:'⏳ Ваши проекты на рассмотрении',
   },
   uz: {
     welcome_sub:"O'zbekiston SSV tibbiy innovatsiyalar platformasi",
@@ -729,6 +730,7 @@ const TT = {
     send_to_review:'Ekspertizaga yuborish', next_arrow:'Keyingi →', no_my_projects:'Siz hali loyiha yubormagansiz',
     experts_only_hint:'Ekspert rolini olish uchun administratorga murojaat qiling.',
     score_section:'⭐ Mezonlar bo‘yicha baho (1–5)', score_required:'Barcha mezonlarni baholang (1–5)', expert_score:'⭐ Ekspert bahosi',
+    my_pending:'⏳ Ko‘rib chiqilayotgan loyihalaringiz',
   }
 };
 function t(k){ const d=TT[LANG]||TT.ru; return d[k]!=null ? d[k] : (TT.ru[k]!=null?TT.ru[k]:k); }
@@ -892,7 +894,10 @@ const UZ_UNIVERSITIES = {
   'Sirdaryo':['Guliston davlat universiteti','Sirdaryo tibbiyot kolleji'],
   'Surxondaryo':['Termiz davlat universiteti','Termiz davlat pedagogika instituti','Termiz muhandislik-texnologiya instituti','Termiz iqtisodiyot va servis universiteti','Surxondaryo tibbiyot kolleji'],
 };
-function leagueLimit() { const v = LEAGUE_LIMITS[CU?.league]; return (v != null) ? v : 2; }
+function leagueLimit() {
+  if (CU?.role === 'expert' || CU?.role === 'admin') return Infinity;  // experts aren't league-capped
+  const v = LEAGUE_LIMITS[CU?.league]; return (v != null) ? v : 2;
+}
 async function projectCount() {
   try { const { count } = await sb.from('projects').select('id',{count:'exact',head:true}).eq('user_id', CU.id); return count || 0; }
   catch(_) { return 0; }
@@ -1438,14 +1443,36 @@ async function loadFeed() {
     const { data, error } = await q;
     if (error) throw error;
     const isObserver = CU?.role === 'admin';
-    list.innerHTML = data?.length
-      ? data.map(p => projCard(p)).join('')
-      : `<div class="empty" style="padding:32px 20px">
+
+    // The author's own pending projects are hidden from the public feed, so show
+    // them at the very top (with their status) — no more "it disappeared" panic.
+    let myPendingHtml = '';
+    if (CU && !isObserver && !feedSearch && feedTag === null && !feedStatus) {
+      try {
+        const { data: mine } = await sb.from('projects')
+          .select('id,title,status,created_at')
+          .eq('user_id', CU.id).in('status', ['under_review','revision'])
+          .order('created_at', { ascending:false });
+        if (mine?.length) {
+          myPendingHtml = `<div style="margin-bottom:12px">
+            <div style="font-size:13px;font-weight:800;margin:4px 0 8px">${t('my_pending')}</div>
+            ${mine.map(p=>`<div class="card-simple flex items-center gap8" style="cursor:pointer;margin-bottom:8px" onclick="openProject('${esc(p.id)}')">
+              <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px">${esc(p.title)}</div>
+                <div style="font-size:12px;color:var(--hint);margin-top:2px">${fmtDate(p.created_at)}</div></div>
+              <span class="status-badge s-${esc(p.status)}">${esc(L().statuses[p.status]||p.status)}</span>
+            </div>`).join('')}
+          </div>`;
+        }
+      } catch(_) {}
+    }
+
+    const emptyHero = `<div class="empty" style="padding:32px 20px">
           <div class="empty-ic">🚀</div>
           <div class="empty-title">${LANG==='uz'?'Lenta hozircha boʻsh':'Лента пока пустая'}</div>
           <p class="text-hint text-sm" style="margin-bottom:16px">${LANG==='uz'?'Yuqorida — yangiliklar va jahon tajribasi. Birinchi boʻling — innovatsiyangizni yuboring!':'Выше — новости и мировой опыт. Станьте первым — отправьте свою инновацию!'}</p>
           ${!isObserver?`<button class="btn" style="max-width:260px;margin:0 auto" onclick="go('submit')">➕ ${LANG==='uz'?'Loyiha yuborish':'Подать проект'}</button>`:''}
         </div>`;
+    list.innerHTML = myPendingHtml + (data?.length ? data.map(p => projCard(p)).join('') : (myPendingHtml ? '' : emptyHero));
   } catch(e) {
     list.innerHTML = `<div class="empty"><div class="empty-ic">⚠️</div><div class="empty-title">Ошибка загрузки</div><p class="text-hint text-sm">${esc(e.message)}</p></div>`;
   }
@@ -2091,6 +2118,7 @@ async function saveProject() {
         const wanted = projectTags.map(toCanon);
         // rank by how many of the project's tags each expert covers, then by load
         const scored = (experts||[])
+          .filter(e => e.id !== CU.id)   // an expert never reviews their own project
           .map(e => ({ e, overlap: (e.expert_tags||[]).map(toCanon).filter(t=>wanted.includes(t)).length }))
           .filter(x => x.overlap > 0)
           .sort((a,b) => b.overlap - a.overlap);
