@@ -690,6 +690,7 @@ const TT = {
     my_projects:'Мои проекты', experts_only:'Только для экспертов', review_queue_btn:'🔍 Очередь на экспертизу',
     send_to_review:'Отправить на экспертизу', next_arrow:'Далее →', no_my_projects:'Вы ещё не подавали проекты',
     experts_only_hint:'Обратитесь к администратору для получения роли эксперта.',
+    score_section:'⭐ Оценка по критериям (1–5)', score_required:'Оцените все критерии (1–5)', expert_score:'⭐ Экспертная оценка',
   },
   uz: {
     welcome_sub:"O'zbekiston SSV tibbiy innovatsiyalar platformasi",
@@ -727,6 +728,7 @@ const TT = {
     my_projects:'Mening loyihalarim', experts_only:'Faqat ekspertlar uchun', review_queue_btn:'🔍 Ekspertiza navbati',
     send_to_review:'Ekspertizaga yuborish', next_arrow:'Keyingi →', no_my_projects:'Siz hali loyiha yubormagansiz',
     experts_only_hint:'Ekspert rolini olish uchun administratorga murojaat qiling.',
+    score_section:'⭐ Mezonlar bo‘yicha baho (1–5)', score_required:'Barcha mezonlarni baholang (1–5)', expert_score:'⭐ Ekspert bahosi',
   }
 };
 function t(k){ const d=TT[LANG]||TT.ru; return d[k]!=null ? d[k] : (TT.ru[k]!=null?TT.ru[k]:k); }
@@ -1540,6 +1542,24 @@ async function openProject(id) {
         <button class="btn sm" style="width:100%;margin-top:12px;background:#d97706" onclick="openRevision()">✏️ Доработать и отправить заново</button>
       </div>`;
     }
+    // Aggregate expert score (criterion averages) once the project has been scored.
+    let scoreBlock = '';
+    try {
+      const { data: rv } = await sb.from('reviews').select('scores,score_avg').eq('project_id', id);
+      const scored = (rv||[]).filter(r => r.score_avg != null);
+      if (scored.length) {
+        const overall = scored.reduce((s,r)=>s+Number(r.score_avg),0) / scored.length;
+        const per = REVIEW_CRITERIA.map(c => {
+          const vals = scored.map(r => r.scores && r.scores[c.key]).filter(v => v != null).map(Number);
+          return { c, a: vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null };
+        }).filter(x => x.a != null);
+        scoreBlock = `<div class="card-simple">
+          <div style="font-size:13px;font-weight:700;color:var(--hint);margin-bottom:8px">${t('expert_score')}</div>
+          <div style="font-size:30px;font-weight:800;color:#f59e0b;line-height:1">${overall.toFixed(1)}<span style="font-size:15px;color:var(--hint)">/5</span> <span style="font-size:12px;color:var(--hint);font-weight:600">· ${scored.length}</span></div>
+          <div style="margin-top:8px">${per.map(p2=>`<div class="flex items-center" style="justify-content:space-between;margin-top:5px"><span style="font-size:12px;color:var(--hint)">${esc(critLabel(p2.c))}</span><span style="font-size:12px;font-weight:700">${p2.a.toFixed(1)} <span style="color:#f59e0b">${'★'.repeat(Math.round(p2.a))}</span></span></div>`).join('')}</div>
+        </div>`;
+      }
+    } catch(_) {}
     $('proj-top-title').textContent = p.title?.substring(0,30) || 'Проект';
     const author = p.profiles || {};
     const lg = author.league || 'novice';
@@ -1568,6 +1588,7 @@ async function openProject(id) {
       <div class="flex" style="flex-wrap:wrap;gap:6px;margin-bottom:16px">${tags}</div>
       ${lifecycleTracker(p.status)}
       ${revisionBlock}
+      ${scoreBlock}
       ${canMentor ? `<button class="btn sm" style="width:100%;margin-bottom:14px;background:#7c3aed" onclick="becomeMentor('${esc(id)}','${esc(p.user_id)}')">🤝 Стать ментором проекта</button>` : ''}
       ${mtr ? `<div class="card-simple" style="margin-bottom:14px;padding:10px 12px;border-left:3px solid #7c3aed"><span style="font-size:12px;color:#7c3aed;font-weight:600">🤝 У проекта есть ментор (Инкубатор)</span></div>` : ''}
       <div class="card-simple">
@@ -2460,6 +2481,36 @@ async function loadReviewHistory() {
   } catch(e) { body.innerHTML = `<p style="color:var(--danger);padding:16px">${esc(e.message)}</p>`; }
 }
 
+/* Structured expert scoring (1–5 per criterion). */
+const REVIEW_CRITERIA = [
+  { key:'novelty',     ru:'Новизна',                    uz:'Yangilik' },
+  { key:'feasibility', ru:'Реализуемость',              uz:'Amalga oshirilishi' },
+  { key:'impact',      ru:'Эффект для здравоохранения', uz:'Sog‘liqqa samara' },
+  { key:'budget',      ru:'Бюджет и окупаемость',       uz:'Byudjet va qoplanish' },
+  { key:'scalability', ru:'Масштабируемость',           uz:'Kengaytirilishi' },
+];
+let reviewScores = {};
+function critLabel(c){ return LANG==='uz' ? c.uz : c.ru; }
+function scoreStars(reviewId, key){
+  const cur = (reviewScores[reviewId] && reviewScores[reviewId][key]) || 0;
+  let h = '';
+  for (let n=1; n<=5; n++) h += `<span onclick="setScore('${reviewId}','${key}',${n})" style="cursor:pointer;font-size:21px;line-height:1">${n<=cur?'⭐':'☆'}</span>`;
+  return h;
+}
+function scoreWidget(reviewId){
+  return REVIEW_CRITERIA.map(c=>`
+    <div class="flex items-center" style="justify-content:space-between;margin:7px 0">
+      <span style="font-size:13px">${esc(critLabel(c))}</span>
+      <span id="rv-star-${reviewId}-${c.key}" style="white-space:nowrap">${scoreStars(reviewId,c.key)}</span>
+    </div>`).join('');
+}
+function setScore(reviewId, key, val){
+  if (!reviewScores[reviewId]) reviewScores[reviewId] = {};
+  reviewScores[reviewId][key] = val;
+  const el = document.getElementById(`rv-star-${reviewId}-${key}`);
+  if (el) el.innerHTML = scoreStars(reviewId, key);
+}
+
 async function loadReviews() {
   const body = $('review-body');
   $('rev-queue-tab')?.classList.add('on'); $('rev-hist-tab')?.classList.remove('on');
@@ -2494,7 +2545,10 @@ async function loadReviews() {
         ${sec('ОЖИДАЕМЫЙ ЭФФЕКТ', p.effect)}
         <div style="margin-top:12px"><div style="font-size:12px;font-weight:700;color:var(--hint);margin-bottom:4px">РЕСУРСЫ</div><p style="font-size:14px;line-height:1.5">${esc(p.cost_range||'—')} • ${esc(p.timeline||'—')}${p.budget_use ? '<br>'+esc(p.budget_use) : ''}</p></div>
 
-        <div class="section-h">Sizning retsenziyangiz / Ваша рецензия (мин. 150 слов)</div>
+        <div class="section-h">${t('score_section')}</div>
+        <div id="rv-scores-${r.id}">${scoreWidget(r.id)}</div>
+
+        <div class="section-h" style="margin-top:14px">Sizning retsenziyangiz / Ваша рецензия (мин. 150 слов)</div>
         <textarea class="input" id="rv-text-${r.id}" style="min-height:140px" placeholder="Loyihaning batafsil tahlili / Детальный анализ…"></textarea>
         <div class="word-cnt" id="rv-wc-${r.id}">0/150</div>
         <div style="display:flex;gap:8px;margin-top:12px">
@@ -2515,14 +2569,15 @@ async function submitReview(reviewId, decision) {
   const ta = document.getElementById('rv-text-'+reviewId);
   const text = ta?.value.trim() || '';
   if (wc(text) < 150) { toast('Напишите минимум 150 слов в рецензии'); return; }
+  const scores = reviewScores[reviewId] || {};
+  if (!REVIEW_CRITERIA.every(c => scores[c.key])) { toast(t('score_required')); return; }
   const tok = tnToken();
   if (!tok) { toast('Сессия истекла — войдите заново'); return; }
   try {
     // The whole verdict (review save + vote tally + project status + author
-    // notification + expert XP) is computed server-side. The browser can no
-    // longer set a project's status or review another expert's assignment.
+    // notification + expert XP + criterion scores) is computed server-side.
     const { data, error } = await sb.rpc('app_submit_review', {
-      p_token: tok, p_review_id: reviewId, p_decision: decision, p_text: text,
+      p_token: tok, p_review_id: reviewId, p_decision: decision, p_text: text, p_scores: scores,
     });
     if (error) throw error;
     haptic('success');
