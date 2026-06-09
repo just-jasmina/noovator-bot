@@ -609,7 +609,7 @@ const I18N = {
     statuses:{draft:'Черновик',under_review:'На экспертизе',revision:'На доработке',approved:'Одобрен',rejected:'Отклонён',pilot:'Пилот',scale:'Масштаб'},
     leagues:{novice:'Новичок',amateur:'Любитель',professional:'Профессионал',innovator:'Новатор'},
     league_badges:{novice:'🌱',amateur:'🔥',professional:'⭐',innovator:'🏆'},
-    occ:['Учусь','Работаю','Учусь и работаю','Безработный'],
+    occ:['Учусь','Работаю','Учусь и работаю','Самозанятый','Безработный'],
     tags:['IT и Цифровизация','Орг. здравоохранения','Фармакология','Педиатрия','Хирургия','Медтехника','ИИ в медицине','Эпидемиология','Мед. образование','Лаборатория','Мед. право','Финансы'],
     aud:['Пациенты','Врачи','Управленцы','Медсёстры','IT-служба','Аптеки'],
     costs:['Финансирование не нужно','До 10 млн сум','До 100 млн сум','Более 100 млн сум'],
@@ -630,7 +630,7 @@ const I18N = {
     statuses:{draft:'Qoralama',under_review:'Ekspertizada',revision:'Qayta ishlashda',approved:'Tasdiqlangan',rejected:'Rad etilgan',pilot:'Pilot',scale:'Kengaytirish'},
     leagues:{novice:'Yangi boshlovchi',amateur:'Havaskor',professional:'Professional',innovator:'Novator'},
     league_badges:{novice:'🌱',amateur:'🔥',professional:'⭐',innovator:'🏆'},
-    occ:["O'qiyman","Ishlayman","O'qiyman va ishlayman","Ishsiz"],
+    occ:["O'qiyman","Ishlayman","O'qiyman va ishlayman","Yakka tartibdagi tadbirkor","Ishsiz"],
     tags:["IT va Raqamlashtirish","Sog'liqni tashkil etish","Farmakologiya","Pediatriya","Jarrohlik","Tibbiy texnika","Tibbiyotda AI","Epidemiologiya","Tibbiy ta'lim","Laboratoriya","Tibbiy huquq","Moliya"],
     aud:["Bemorlar","Shifokorlar","Boshqaruvchilar","Hamshiralar","IT-xizmat","Dorixonalar"],
     costs:["Moliyalashtirish kerak emas","10 mln so'mgacha","100 mln so'mgacha","100 mln so'mdan ortiq"],
@@ -1126,7 +1126,7 @@ function buildRegForm() {
       <div class="radio-dot"></div>${esc(o)}
     </div>`).join('');
   const studying = (regOcc===0 || regOcc===2);
-  const working  = (regOcc===1 || regOcc===2);
+  const working  = (regOcc===1 || regOcc===2 || regOcc===3);
   const uniWrap = $('r-university-wrap');
   const wpWrap = $('r-workplace-wrap');
   if (uniWrap) uniWrap.style.display = studying ? '' : 'none';
@@ -1190,7 +1190,7 @@ async function doRegister() {
   const pnfl      = $('r-pnfl').value.trim();
   // Place of study (university select) and/or work (text), combined into workplace.
   const university = (regOcc===0 || regOcc===2) ? ($('r-university')?.value || '') : '';
-  const workText  = (regOcc===1 || regOcc===2) ? ($('r-workplace')?.value.trim() || '') : '';
+  const workText  = (regOcc===1 || regOcc===2 || regOcc===3) ? ($('r-workplace')?.value.trim() || '') : '';
   const workplace = [university, workText].filter(Boolean).join(' / ');
 
   if (!username || username.length < 3) { toast('Логин: минимум 3 символа'); return; }
