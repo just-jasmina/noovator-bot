@@ -692,6 +692,10 @@ const TT = {
     experts_only_hint:'Обратитесь к администратору для получения роли эксперта.',
     score_section:'⭐ Оценка по критериям (1–5)', score_required:'Оцените все критерии (1–5)', expert_score:'⭐ Экспертная оценка',
     my_pending:'⏳ Ваши проекты на рассмотрении',
+    documents:'Документы проекта', attach_file:'Нажмите, чтобы прикрепить файл',
+    file_hint:'PDF, DOCX, XLSX, PPTX, изображения, ZIP • до 10 МБ', uploading:'Загрузка…',
+    file_too_big:'Файл больше 10 МБ', file_attached:'Файл прикреплён',
+    file_limit_note:'Максимум файлов для вашей лиги', project_files:'📎 Файлы проекта', download:'Скачать',
   },
   uz: {
     welcome_sub:"O'zbekiston SSV tibbiy innovatsiyalar platformasi",
@@ -731,6 +735,10 @@ const TT = {
     experts_only_hint:'Ekspert rolini olish uchun administratorga murojaat qiling.',
     score_section:'⭐ Mezonlar bo‘yicha baho (1–5)', score_required:'Barcha mezonlarni baholang (1–5)', expert_score:'⭐ Ekspert bahosi',
     my_pending:'⏳ Ko‘rib chiqilayotgan loyihalaringiz',
+    documents:'Loyiha hujjatlari', attach_file:'Fayl biriktirish uchun bosing',
+    file_hint:'PDF, DOCX, XLSX, PPTX, rasm, ZIP • 10 MB gacha', uploading:'Yuklanmoqda…',
+    file_too_big:'Fayl 10 MB dan katta', file_attached:'Fayl biriktirildi',
+    file_limit_note:'Ligangiz uchun maksimal fayllar', project_files:'📎 Loyiha fayllari', download:'Yuklab olish',
   }
 };
 function t(k){ const d=TT[LANG]||TT.ru; return d[k]!=null ? d[k] : (TT.ru[k]!=null?TT.ru[k]:k); }
@@ -875,6 +883,16 @@ const LEAGUE_XP = { novice:0, amateur:500, professional:1500, innovator:3000 };
 const LEAGUE_ORDER = ['novice','amateur','professional','innovator'];
 // Project submission quota per league (TZ privileges). Innovator = unlimited.
 const LEAGUE_LIMITS = { novice:2, amateur:5, professional:10, innovator:Infinity };
+const LEAGUE_FILE_LIMITS = { novice:1, amateur:3, professional:5, innovator:10 };
+const MAX_FILE_BYTES = 10 * 1024 * 1024;  // 10 MB
+function leagueFileLimit() {
+  if (CU?.role === 'expert' || CU?.role === 'admin') return 10;
+  return LEAGUE_FILE_LIMITS[CU?.league] || 1;
+}
+function fmtSize(b) {
+  b = Number(b) || 0;
+  return b >= 1048576 ? (b/1048576).toFixed(1)+' МБ' : Math.max(1, Math.round(b/1024))+' КБ';
+}
 // Regions of Uzbekistan (for talent registry & ministry analytics).
 const UZ_REGIONS = ['Toshkent shahri','Toshkent viloyati','Andijon','Buxoro','Fargʻona','Jizzax','Xorazm','Namangan','Navoiy','Qashqadaryo','Qoraqalpogʻiston','Samarqand','Sirdaryo','Surxondaryo'];
 // Universities/colleges by region (medical-focused + major ones). 'Другое' lets others register.
@@ -931,7 +949,7 @@ let regOcc = -1;
 let regTags = [];
 
 /* ===== SUBMIT FORM STATE ===== */
-let SF = { step:0, name:'', tags:[], pitch:'', prob:'', sol:'', aud:[], kpis:[''], eff:'', cost:-1, need:'', time:'', files:[] };
+let SF = { step:0, name:'', tags:[], pitch:'', prob:'', sol:'', aud:[], kpis:[''], eff:'', cost:-1, need:'', time:'', files:[], uploading:false };
 
 /* ===== UTILITIES ===== */
 const $ = id => document.getElementById(id);
@@ -1538,6 +1556,21 @@ function projCard(p) {
 }
 
 /* ===== PROJECT DETAIL ===== */
+// Attached project files (download links).
+function renderFiles(files) {
+  const arr = Array.isArray(files) ? files.filter(f=>f && f.url) : [];
+  if (!arr.length) return '';
+  return `<div class="card-simple">
+    <div style="font-size:13px;font-weight:700;color:var(--hint);margin-bottom:8px">${t('project_files')}</div>
+    ${arr.map(f=>`<a href="${esc(f.url)}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid var(--sep);border-radius:10px;margin-bottom:6px;text-decoration:none;color:inherit">
+      <span style="font-size:18px">📄</span>
+      <span style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.name||'file')}</span>
+      <span style="font-size:11px;color:var(--hint)">${fmtSize(f.size)}</span>
+      <span style="color:var(--accent);font-size:13px;font-weight:700">⬇</span>
+    </a>`).join('')}
+  </div>`;
+}
+
 let projDetail = null;   // last opened project object (used by the revision flow)
 async function openProject(id) {
   currentProjId = id;
@@ -1637,6 +1670,7 @@ async function openProject(id) {
         <p style="font-size:14px">${esc(p.cost_range||'')} • ${esc(p.timeline||'')}</p>
         ${p.budget_use ? `<p style="font-size:14px;margin-top:6px;line-height:1.5">${esc(p.budget_use)}</p>` : ''}
       </div>
+      ${renderFiles(p.files)}
       <div style="display:flex;align-items:center;gap:12px;margin:16px 0">
         <button class="like-btn${isLiked?' liked':''}" id="like-btn" onclick="toggleLike('${esc(id)}')">
           ${isLiked?'❤️':'🤍'} <span id="like-count">${fmt(p.likes_count||0)}</span>
@@ -1801,7 +1835,7 @@ async function initSubmit() {
     }
   }
   if (act) act.style.display = '';
-  SF = { step:0, name:'', tags:[], pitch:'', prob:'', sol:'', aud:[], kpis:[''], eff:'', cost:-1, need:'', time:'', files:[] };
+  SF = { step:0, name:'', tags:[], pitch:'', prob:'', sol:'', aud:[], kpis:[''], eff:'', cost:-1, need:'', time:'', files:[], uploading:false };
   renderSubmitStep();
 }
 
@@ -1991,17 +2025,19 @@ function renderSubmitStep() {
   } else if (s === 4) {
     const fileItems = SF.files.map((f,i)=>`
       <div class="file-item"><span>📄</span><span class="file-name">${esc(f.name)}</span>
+        <span style="font-size:11px;color:var(--hint);margin-left:auto;margin-right:8px">${fmtSize(f.size)}</span>
         <button class="file-del" onclick="removeFile(${i})">×</button></div>`).join('');
+    const fileLim = leagueFileLimit();
     body.innerHTML = header + `
-      <div class="group"><label class="lbl">Документы</label>
-        <div class="dropzone" onclick="addFile()">
-          <div style="font-size:32px;margin-bottom:8px">📎</div>
-          <div style="font-weight:600">Нажмите, чтобы прикрепить</div>
-          <div style="font-size:12px;margin-top:4px">PDF, DOCX, XLSX • до 10 МБ</div>
+      <div class="group"><label class="lbl">${t('documents')}</label>
+        <div class="dropzone" onclick="addFile()" style="${SF.uploading?'opacity:.6;pointer-events:none':''}">
+          <div style="font-size:32px;margin-bottom:8px">${SF.uploading?'<span class="spin-sm"></span>':'📎'}</div>
+          <div style="font-weight:600">${SF.uploading ? t('uploading') : t('attach_file')}</div>
+          <div style="font-size:12px;margin-top:4px">${t('file_hint')}</div>
         </div>
         <div id="file-list">${fileItems}</div>
         <div style="font-size:12px;background:#fff7e6;border:1px solid #ffe3a3;border-radius:9px;padding:10px;margin-top:10px;color:#8a6500">
-          Лига «Новичок»: максимум 1 файл. Более высокие лиги — больше файлов.
+          ${t('file_limit_note')}: ${fileLim===Infinity?'∞':fileLim}
         </div>
       </div>`;
   }
@@ -2020,14 +2056,34 @@ function toggleSAud(i) {
 }
 function addKpi() { if (SF.kpis.length < 6) { SF.kpis.push(''); renderSubmitStep(); } }
 function removeKpi(i) { SF.kpis.splice(i,1); renderSubmitStep(); }
-let fileSeq = 0;
 function addFile() {
-  const lim = SF.files.length >= 1;
-  if (lim) { toast('Лига «Новичок»: максимум 1 файл'); return; }
-  fileSeq++;
-  const names=['Концепция.pdf','Смета.xlsx','Презентация.pdf','Описание.docx'];
-  SF.files.push({name:names[(fileSeq-1)%4],size:'120 КБ'});
-  renderSubmitStep();
+  if (SF.uploading) return;
+  const lim = leagueFileLimit();
+  if (SF.files.length >= lim) { toast(`Максимум файлов для вашей лиги: ${lim}`); return; }
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.zip';
+  inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) uploadProjectFile(f); };
+  inp.click();
+}
+async function uploadProjectFile(f) {
+  if (f.size > MAX_FILE_BYTES) { toast(t('file_too_big')); return; }
+  if (!CU || !sbOk()) { toast(t('login_account')); return; }
+  SF.uploading = true; renderSubmitStep();
+  try {
+    const ext = (f.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g,'');
+    const path = `${CU.id}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
+    const { error } = await sb.storage.from('project-files').upload(path, f, { upsert:false, contentType: f.type || undefined });
+    if (error) throw error;
+    const { data: pub } = sb.storage.from('project-files').getPublicUrl(path);
+    SF.files.push({ url: pub.publicUrl, name: f.name, size: f.size });
+    toast(t('file_attached'));
+    haptic('success');
+  } catch(e) {
+    toast('Ошибка загрузки: ' + (e.message || ''));
+  } finally {
+    SF.uploading = false; renderSubmitStep();
+  }
 }
 function removeFile(i) { SF.files.splice(i,1); renderSubmitStep(); }
 
@@ -2105,6 +2161,7 @@ async function saveProject() {
       budget_use: SF.need,
       timeline: L().timelines[parseInt(SF.time)],
       status: 'under_review',
+      files: (SF.files||[]).map(f=>({url:f.url, name:f.name, size:f.size})),
       likes_count: 0,
       comments_count: 0
     }).select('id').single();
@@ -2550,7 +2607,7 @@ async function loadReviews() {
   try {
     const kpi = await loadExpertKpi();
     const { data: reviews } = await sb.from('reviews')
-      .select('id, sla_deadline, created_at, projects!reviews_project_id_fkey(id,title,tags,pitch,problem,solution,audience,kpis,effect,cost_range,budget_use,timeline,status)')
+      .select('id, sla_deadline, created_at, projects!reviews_project_id_fkey(id,title,tags,pitch,problem,solution,audience,kpis,effect,cost_range,budget_use,timeline,status,files)')
       .eq('expert_id',CU.id).is('decision',null).order('created_at',{ascending:true}).limit(20);
     if (!reviews?.length) { body.innerHTML = kpi + '<div class="empty"><div class="empty-ic">✅</div><div class="empty-title">Barcha loyihalar ko\'rib chiqildi!</div><p class="text-hint text-sm">Yangi loyiha kelganda shu yerda ko\'rinadi</p></div>'; return; }
     const sec = (label, val) => val && String(val).trim() ? `<div style="margin-top:12px"><div style="font-size:12px;font-weight:700;color:var(--hint);margin-bottom:4px">${label}</div><p style="font-size:14px;line-height:1.55">${esc(val)}</p></div>` : '';
@@ -2572,6 +2629,7 @@ async function loadReviews() {
         ${kpis ? `<div style="margin-top:12px"><div style="font-size:12px;font-weight:700;color:var(--hint);margin-bottom:4px">KPI</div><ul style="padding-left:18px;font-size:14px;line-height:1.55;margin:0">${kpis}</ul></div>` : ''}
         ${sec('ОЖИДАЕМЫЙ ЭФФЕКТ', p.effect)}
         <div style="margin-top:12px"><div style="font-size:12px;font-weight:700;color:var(--hint);margin-bottom:4px">РЕСУРСЫ</div><p style="font-size:14px;line-height:1.5">${esc(p.cost_range||'—')} • ${esc(p.timeline||'—')}${p.budget_use ? '<br>'+esc(p.budget_use) : ''}</p></div>
+        ${renderFiles(p.files)}
 
         <div class="section-h">${t('score_section')}</div>
         <div id="rv-scores-${r.id}">${scoreWidget(r.id)}</div>
