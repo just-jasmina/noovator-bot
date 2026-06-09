@@ -9,8 +9,10 @@ Users without a telegram_id (e.g. web-only experts) are simply skipped — they
 see notifications inside the app.
 """
 import asyncio
+import json
 import asyncpg
 from aiogram import Bot
+from aiogram.types import URLInputFile
 from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest
 from loguru import logger
 
@@ -50,6 +52,31 @@ async def _connect() -> asyncpg.Connection:
             await asyncio.sleep(10)
 
 
+async def _send_project_files(bot: Bot, conn: asyncpg.Connection, chat_id: int, project_id) -> None:
+    """Send a project's attached files (Supabase Storage URLs) as Telegram documents."""
+    try:
+        raw = await conn.fetchval("SELECT files FROM projects WHERE id = $1", project_id)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"[notifier] files fetch failed for {project_id}: {e}")
+        return
+    if not raw:
+        return
+    files = raw if isinstance(raw, list) else (json.loads(raw) if isinstance(raw, str) else [])
+    for f in files[:5]:  # cap: at most 5 documents per assignment
+        url = (f or {}).get("url")
+        if not url:
+            continue
+        name = (f or {}).get("name") or "document"
+        try:
+            await bot.send_document(
+                chat_id=chat_id,
+                document=URLInputFile(url, filename=name),
+                caption=f"📎 {name}",
+            )
+        except Exception as e:  # noqa: BLE001 — a bad file never blocks the queue
+            logger.info(f"[notifier] file send skipped ({name}): {e}")
+
+
 async def _deliver(bot: Bot, conn: asyncpg.Connection) -> int:
     rows = await conn.fetch(
         """
@@ -79,6 +106,10 @@ async def _deliver(bot: Bot, conn: asyncpg.Connection) -> int:
                 disable_web_page_preview=True,
             )
             sent += 1
+            # When a project is assigned for expertise, also deliver its attached
+            # file(s) so the expert can read them straight from Telegram.
+            if r["type"] == "review_assigned" and r["project_id"]:
+                await _send_project_files(bot, conn, r["telegram_id"], r["project_id"])
         except (TelegramForbiddenError, TelegramBadRequest) as e:
             # User blocked the bot / chat not found — permanent, don't retry.
             logger.info(f"[notifier] skip {r['telegram_id']} ({r['type']}): {e}")
